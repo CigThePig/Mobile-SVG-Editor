@@ -41,6 +41,10 @@ interface EditorStore {
   addToSelection: (id: string) => void
   removeFromSelection: (id: string) => void
   clearSelection: () => void
+  toggleLeftPanel: () => void
+  toggleRightPanel: () => void
+  setLeftPanelOpen: (open: boolean) => void
+  setRightPanelOpen: (open: boolean) => void
   toggleAspectRatioLock: () => void
   setAspectRatioLock: (locked: boolean) => void
   toggleMultiSelectEnabled: () => void
@@ -72,8 +76,8 @@ export const useEditorStore = create<EditorStore>()(
       outlineMode: false
     },
     ui: {
-      leftPanelOpen: true,
-      rightPanelOpen: true,
+      leftPanelOpen: false,
+      rightPanelOpen: false,
       lockAspectRatio: false,
       multiSelectEnabled: false,
       marqueeRect: null,
@@ -126,6 +130,28 @@ export const useEditorStore = create<EditorStore>()(
         state.selection.selectedNodeIds = []
         state.selection.activeNodeId = undefined
       }),
+    toggleLeftPanel: () =>
+      set((state) => {
+        const next = !state.ui.leftPanelOpen
+        state.ui.leftPanelOpen = next
+        if (next) state.ui.rightPanelOpen = false
+      }),
+    toggleRightPanel: () =>
+      set((state) => {
+        const next = !state.ui.rightPanelOpen
+        state.ui.rightPanelOpen = next
+        if (next) state.ui.leftPanelOpen = false
+      }),
+    setLeftPanelOpen: (open) =>
+      set((state) => {
+        state.ui.leftPanelOpen = open
+        if (open) state.ui.rightPanelOpen = false
+      }),
+    setRightPanelOpen: (open) =>
+      set((state) => {
+        state.ui.rightPanelOpen = open
+        if (open) state.ui.leftPanelOpen = false
+      }),
     toggleAspectRatioLock: () =>
       set((state) => {
         state.ui.lockAspectRatio = !state.ui.lockAspectRatio
@@ -149,6 +175,7 @@ export const useEditorStore = create<EditorStore>()(
     openInspectorSection: (section) =>
       set((state) => {
         state.ui.rightPanelOpen = true
+        state.ui.leftPanelOpen = false
         state.ui.inspectorSection = section
       }),
     replaceDocument: (doc) =>

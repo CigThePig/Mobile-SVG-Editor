@@ -13,6 +13,7 @@ export function EditorPage() {
         flexDirection: 'column',
         width: '100%',
         height: '100dvh',
+        paddingTop: 'var(--sai-top, 0px)',
         background: '#0a0a0a',
         color: '#ffffff'
       }}
@@ -20,11 +21,11 @@ export function EditorPage() {
       <EditorTopBar />
       <div style={{ position: 'relative', flex: 1, minHeight: 0, overflow: 'hidden' }}>
         <CanvasViewport />
-        <LayersPanel />
-        <InspectorSheet />
       </div>
       <ContextActionStrip />
       <EditorBottomBar />
+      <LayersPanel />
+      <InspectorSheet />
     </div>
   )
 }

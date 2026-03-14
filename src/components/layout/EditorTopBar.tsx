@@ -1,6 +1,17 @@
+import { ArrowLeft, FilePlus, Undo2, Redo2, ZoomIn, ZoomOut, Save, Layers, SlidersHorizontal } from 'lucide-react'
 import { createAndSaveDocument, saveDocument } from '@/db/dexie/queries'
 import { useEditorStore } from '@/stores/editorStore'
 import { useHistoryStore } from '@/stores/historyStore'
+
+const iconBtn = (active = false): React.CSSProperties => ({
+  width: 36,
+  height: 36,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  borderRadius: 8,
+  background: active ? 'rgba(96,165,250,0.25)' : 'rgba(255,255,255,0.06)'
+})
 
 export function EditorTopBar() {
   const title = useEditorStore((s) => s.activeDocument.title)
@@ -10,12 +21,15 @@ export function EditorTopBar() {
   const replaceDocument = useEditorStore((s) => s.replaceDocument)
   const clearSelection = useEditorStore((s) => s.clearSelection)
   const setCamera = useEditorStore((s) => s.setCamera)
+  const leftPanelOpen = useEditorStore((s) => s.ui.leftPanelOpen)
+  const rightPanelOpen = useEditorStore((s) => s.ui.rightPanelOpen)
+  const toggleLeftPanel = useEditorStore((s) => s.toggleLeftPanel)
+  const toggleRightPanel = useEditorStore((s) => s.toggleRightPanel)
   const undo = useHistoryStore((s) => s.undo)
   const redo = useHistoryStore((s) => s.redo)
   const canUndo = useHistoryStore((s) => s.canUndo())
   const canRedo = useHistoryStore((s) => s.canRedo())
 
-  // Zoom while keeping the current viewport center fixed in document space
   const zoomAroundCenter = (nextZoom: number) => {
     const clampedZoom = Math.min(4, Math.max(0.25, nextZoom))
     if (clampedZoom === view.zoom) return
@@ -60,30 +74,57 @@ export function EditorTopBar() {
   return (
     <header
       style={{
-        height: 56,
+        height: 44,
+        paddingTop: 'var(--sai-top, 0px)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        padding: '0 12px',
+        padding: '0 8px',
         borderBottom: '1px solid rgba(255,255,255,0.1)',
         background: '#111111',
-        gap: 8
+        gap: 4,
+        flexShrink: 0
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <button>Back</button>
-        <button onClick={() => void handleNew()}>New</button>
+      {/* Left group */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+        <button style={iconBtn()} aria-label="Back">
+          <ArrowLeft size={18} />
+        </button>
+        <button style={iconBtn()} onClick={() => void handleNew()} aria-label="New document">
+          <FilePlus size={18} />
+        </button>
+        <button style={iconBtn(leftPanelOpen)} onClick={toggleLeftPanel} aria-label="Toggle layers">
+          <Layers size={18} />
+        </button>
       </div>
-      <div style={{ fontSize: 14, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+
+      {/* Center title */}
+      <div style={{ flex: 1, fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'center', minWidth: 0 }}>
         {title}
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <button disabled={!canUndo} onClick={() => void handleUndo()} style={{ opacity: canUndo ? 1 : 0.4 }}>Undo</button>
-        <button disabled={!canRedo} onClick={() => void handleRedo()} style={{ opacity: canRedo ? 1 : 0.4 }}>Redo</button>
-        <button onClick={() => zoomAroundCenter(zoom - 0.1)}>-</button>
-        <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.7)', minWidth: 44, textAlign: 'center' }}>{Math.round(zoom * 100)}%</span>
-        <button onClick={() => zoomAroundCenter(zoom + 0.1)}>+</button>
-        <button onClick={() => void handleSave()}>Save</button>
+
+      {/* Right group */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+        <button disabled={!canUndo} onClick={() => void handleUndo()} style={{ ...iconBtn(), opacity: canUndo ? 1 : 0.35 }} aria-label="Undo">
+          <Undo2 size={18} />
+        </button>
+        <button disabled={!canRedo} onClick={() => void handleRedo()} style={{ ...iconBtn(), opacity: canRedo ? 1 : 0.35 }} aria-label="Redo">
+          <Redo2 size={18} />
+        </button>
+        <button onClick={() => zoomAroundCenter(zoom - 0.1)} style={iconBtn()} aria-label="Zoom out">
+          <ZoomOut size={16} />
+        </button>
+        <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.7)', minWidth: 36, textAlign: 'center' }}>{Math.round(zoom * 100)}%</span>
+        <button onClick={() => zoomAroundCenter(zoom + 0.1)} style={iconBtn()} aria-label="Zoom in">
+          <ZoomIn size={16} />
+        </button>
+        <button style={iconBtn(rightPanelOpen)} onClick={toggleRightPanel} aria-label="Toggle inspector">
+          <SlidersHorizontal size={18} />
+        </button>
+        <button onClick={() => void handleSave()} style={iconBtn()} aria-label="Save">
+          <Save size={18} />
+        </button>
       </div>
     </header>
   )

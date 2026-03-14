@@ -2,15 +2,15 @@ import { Hand, MousePointer2, Square, PenTool, Type, Paintbrush, LayoutGrid, Sea
 import { useEditorStore, type EditorMode } from '@/stores/editorStore'
 import type { LucideIcon } from 'lucide-react'
 
-const modeConfig: { mode: EditorMode; icon: LucideIcon; label: string }[] = [
-  { mode: 'navigate', icon: Hand, label: 'Move' },
-  { mode: 'select', icon: MousePointer2, label: 'Select' },
-  { mode: 'shape', icon: Square, label: 'Shape' },
-  { mode: 'pen', icon: PenTool, label: 'Pen' },
-  { mode: 'text', icon: Type, label: 'Text' },
-  { mode: 'paint', icon: Paintbrush, label: 'Paint' },
-  { mode: 'structure', icon: LayoutGrid, label: 'Struct' },
-  { mode: 'inspect', icon: Search, label: 'Inspect' }
+const modeConfig: { mode: EditorMode; icon: LucideIcon; label: string; available: boolean }[] = [
+  { mode: 'navigate', icon: Hand, label: 'Pan', available: true },
+  { mode: 'select', icon: MousePointer2, label: 'Select', available: true },
+  { mode: 'shape', icon: Square, label: 'Shape', available: true },
+  { mode: 'pen', icon: PenTool, label: 'Pen', available: false },
+  { mode: 'text', icon: Type, label: 'Text', available: false },
+  { mode: 'paint', icon: Paintbrush, label: 'Paint', available: false },
+  { mode: 'structure', icon: LayoutGrid, label: 'Structure', available: false },
+  { mode: 'inspect', icon: Search, label: 'Inspect', available: false }
 ]
 
 export function EditorBottomBar() {
@@ -21,7 +21,7 @@ export function EditorBottomBar() {
     <nav
       className="hide-scrollbar"
       style={{
-        height: 52,
+        height: 60,
         display: 'flex',
         alignItems: 'center',
         gap: 2,
@@ -35,28 +35,47 @@ export function EditorBottomBar() {
         flexShrink: 0
       }}
     >
-      {modeConfig.map(({ mode: m, icon: Icon, label }) => {
+      {modeConfig.map(({ mode: m, icon: Icon, label, available }) => {
         const active = mode === m
         return (
           <button
             key={m}
             onClick={() => setMode(m)}
+            title={available ? label : `${label} (coming soon)`}
             style={{
-              flex: '0 0 auto',
-              width: 46,
-              height: 44,
+              flex: '1 1 0',
+              minWidth: 52,
+              maxWidth: 72,
+              height: 50,
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'center',
               justifyContent: 'center',
-              gap: 2,
-              borderRadius: 10,
-              color: active ? '#93c5fd' : 'rgba(255,255,255,0.6)',
-              background: active ? 'rgba(96,165,250,0.15)' : 'transparent'
+              gap: 3,
+              borderRadius: 12,
+              position: 'relative',
+              color: active ? '#93c5fd' : available ? 'rgba(255,255,255,0.65)' : 'rgba(255,255,255,0.28)',
+              background: active ? 'rgba(96,165,250,0.14)' : 'transparent',
+              transition: 'color 0.1s, background 0.1s'
             }}
           >
+            {/* Active indicator bar at bottom */}
+            {active && (
+              <span
+                style={{
+                  position: 'absolute',
+                  bottom: 4,
+                  left: '50%',
+                  transform: 'translateX(-50%)',
+                  width: 16,
+                  height: 2,
+                  borderRadius: 1,
+                  background: '#60a5fa'
+                }}
+              />
+            )}
             <Icon size={20} />
-            <span style={{ fontSize: 9, lineHeight: 1 }}>{label}</span>
+            <span style={{ fontSize: 10, lineHeight: 1, fontWeight: active ? 600 : 400 }}>{label}</span>
           </button>
         )
       })}

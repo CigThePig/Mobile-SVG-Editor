@@ -1,8 +1,20 @@
-import { Plus, Group, Ungroup, Layers, Lock } from 'lucide-react'
+import { Plus, Group, Ungroup, Layers, Lock, Unlock } from 'lucide-react'
 import { getNodeById } from '@/features/documents/utils/documentMutations'
 import { runCommand } from '@/features/documents/services/commandRunner'
 import { getEffectiveViewBox } from '@/features/canvas/utils/viewBox'
-import { useEditorStore } from '@/stores/editorStore'
+import { useEditorStore, type EditorMode } from '@/stores/editorStore'
+
+const MODE_LABELS: Record<EditorMode, string> = {
+  navigate: 'Pan',
+  select: 'Select',
+  shape: 'Shape',
+  pen: 'Pen',
+  path: 'Path',
+  text: 'Text',
+  paint: 'Paint',
+  structure: 'Structure',
+  inspect: 'Inspect'
+}
 
 export function ContextActionStrip() {
   const mode = useEditorStore((s) => s.mode)
@@ -37,53 +49,92 @@ export function ContextActionStrip() {
     void runCommand('document.ungroupSelection', { nodeIds: selectedNodeIds })
   }
 
-  const pillStyle = (active = false, disabled = false): React.CSSProperties => ({
-    padding: '6px 10px',
-    borderRadius: 12,
-    background: active ? 'rgba(96,165,250,0.25)' : 'rgba(255,255,255,0.08)',
-    color: active ? '#93c5fd' : '#ffffff',
-    whiteSpace: 'nowrap',
-    opacity: disabled ? 0.45 : 1,
+  const pill = (active = false, disabled = false): React.CSSProperties => ({
+    padding: '0 12px',
+    height: 34,
+    borderRadius: 10,
+    background: active ? 'rgba(96,165,250,0.22)' : 'rgba(255,255,255,0.08)',
+    border: active ? '1px solid rgba(96,165,250,0.4)' : '1px solid transparent',
+    color: active ? '#93c5fd' : disabled ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.9)',
+    whiteSpace: 'nowrap' as const,
     display: 'flex',
     alignItems: 'center',
-    gap: 4,
-    fontSize: 11
+    gap: 5,
+    fontSize: 12,
+    fontWeight: 500,
+    flexShrink: 0,
+    cursor: disabled ? 'default' : 'pointer'
   })
+
+  const modeLabel = MODE_LABELS[mode] ?? mode
 
   return (
     <div
       className="hide-scrollbar"
       style={{
-        height: 44,
+        height: 50,
         display: 'flex',
         alignItems: 'center',
         gap: 6,
-        padding: '0 8px',
-        borderTop: '1px solid rgba(255,255,255,0.1)',
-        background: '#171717',
+        padding: '0 10px',
+        borderTop: '1px solid rgba(255,255,255,0.08)',
+        background: '#161616',
         overflowX: 'auto',
         WebkitOverflowScrolling: 'touch',
         flexShrink: 0
       }}
     >
-      <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.6)', whiteSpace: 'nowrap' }}>{mode}</span>
-      <span style={{ fontSize: 11, color: selectionCount > 0 ? '#93c5fd' : 'rgba(255,255,255,0.5)', whiteSpace: 'nowrap' }}>
-        {selectionCount} sel
+      {/* Mode badge */}
+      <span
+        style={{
+          fontSize: 11,
+          fontWeight: 600,
+          color: 'rgba(255,255,255,0.45)',
+          letterSpacing: '0.04em',
+          textTransform: 'uppercase',
+          whiteSpace: 'nowrap',
+          flexShrink: 0
+        }}
+      >
+        {modeLabel}
       </span>
-      <button onClick={addRect} style={pillStyle(false)}>
-        <Plus size={14} /> Rect
+
+      {/* Divider */}
+      <span style={{ width: 1, height: 18, background: 'rgba(255,255,255,0.12)', flexShrink: 0 }} />
+
+      {/* Selection count badge — only shown when something is selected */}
+      {selectionCount > 0 && (
+        <span
+          style={{
+            fontSize: 12,
+            fontWeight: 600,
+            color: '#93c5fd',
+            background: 'rgba(96,165,250,0.15)',
+            borderRadius: 8,
+            padding: '2px 8px',
+            whiteSpace: 'nowrap',
+            flexShrink: 0
+          }}
+        >
+          {selectionCount === 1 ? '1 selected' : `${selectionCount} selected`}
+        </span>
+      )}
+
+      <button onClick={addRect} style={pill(false)}>
+        <Plus size={14} /> Add Rect
       </button>
-      <button disabled={!canGroup} onClick={groupSelection} style={pillStyle(false, !canGroup)}>
+      <button disabled={!canGroup} onClick={groupSelection} style={pill(false, !canGroup)}>
         <Group size={14} /> Group
       </button>
-      <button disabled={!canUngroup} onClick={ungroupSelection} style={pillStyle(false, !canUngroup)}>
+      <button disabled={!canUngroup} onClick={ungroupSelection} style={pill(false, !canUngroup)}>
         <Ungroup size={14} /> Ungroup
       </button>
-      <button onClick={toggleMultiSelectEnabled} style={pillStyle(multiSelectEnabled)}>
+      <button onClick={toggleMultiSelectEnabled} style={pill(multiSelectEnabled)}>
         <Layers size={14} /> Multi
       </button>
-      <button onClick={toggleAspectRatioLock} style={pillStyle(lockAspectRatio)}>
-        <Lock size={14} /> Aspect
+      <button onClick={toggleAspectRatioLock} style={pill(lockAspectRatio)}>
+        {lockAspectRatio ? <Lock size={14} /> : <Unlock size={14} />}
+        Aspect
       </button>
     </div>
   )

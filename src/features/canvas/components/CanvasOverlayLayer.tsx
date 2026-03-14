@@ -143,6 +143,11 @@ function getHandleCursor(handle: ResizeHandlePosition) {
   }
 }
 
+/** Whether this is a corner handle (vs mid-edge). Corners are larger and more prominent. */
+function isCornerHandle(handle: ResizeHandlePosition) {
+  return handle.length === 2
+}
+
 export function CanvasOverlayLayer() {
   const document = useEditorStore((s) => s.activeDocument)
   const selectedNodeIds = useEditorStore((s) => s.selection.selectedNodeIds)
@@ -159,8 +164,11 @@ export function CanvasOverlayLayer() {
   const selectedNodes = selectedNodeIds.map((id) => getNodeById(document.root, id)).filter((node): node is NonNullable<typeof node> => Boolean(node))
   const selectionBounds = getBoundsForNodes(selectedNodes)
   const primaryNode = selectedNodes.length === 1 ? selectedNodes[0] : undefined
-  const handleRadius = Math.max(8, effectiveViewBox.width * 0.008)
-  const rotationOffset = Math.max(handleRadius * 4, effectiveViewBox.height * 0.03)
+  const isMulti = selectedNodeIds.length > 1
+
+  // Scale handle radius with viewport — bigger on mobile, smaller when zoomed in
+  const handleRadius = Math.max(9, effectiveViewBox.width * 0.009)
+  const rotationOffset = Math.max(handleRadius * 4.5, effectiveViewBox.height * 0.035)
 
   const finishTransform = useCallback(async () => {
     const interaction = transformRef.current
@@ -283,6 +291,11 @@ export function CanvasOverlayLayer() {
     .map((node) => ({ id: node.id, bounds: getNodeBounds(node) }))
     .filter((item): item is { id: string; bounds: NodeBounds } => Boolean(item.bounds))
 
+  // Selection box appearance varies: single = solid bright, multi individual = lighter dashed
+  const singleStrokeColor = '#60a5fa'
+  const multiIndividualStrokeColor = 'rgba(96,165,250,0.5)'
+  const multiGroupStrokeColor = '#93c5fd'
+
   return (
     <svg
       ref={svgRef}
@@ -291,6 +304,7 @@ export function CanvasOverlayLayer() {
       viewBox={`${effectiveViewBox.x} ${effectiveViewBox.y} ${effectiveViewBox.width} ${effectiveViewBox.height}`}
       style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}
     >
+      {/* Individual selection boxes */}
       {individualBounds.map(({ id, bounds }) => (
         <rect
           key={`sel-${id}`}
@@ -299,44 +313,50 @@ export function CanvasOverlayLayer() {
           width={bounds.width + 8}
           height={bounds.height + 8}
           fill="none"
-          stroke="#60a5fa"
-          strokeWidth={selectedNodeIds.length > 1 ? 1.25 : 2}
-          strokeDasharray={selectedNodeIds.length > 1 ? '6 6' : '8 6'}
+          stroke={isMulti ? multiIndividualStrokeColor : singleStrokeColor}
+          strokeWidth={isMulti ? 1.5 : 2}
+          strokeDasharray={isMulti ? '5 5' : 'none'}
           vectorEffect="non-scaling-stroke"
-          rx={8}
-          opacity={selectedNodeIds.length > 1 ? 0.7 : 1}
+          rx={6}
         />
       ))}
-      {selectionBounds && selectedNodeIds.length > 1 ? (
+
+      {/* Group bounding box for multi-selection */}
+      {selectionBounds && isMulti ? (
         <rect
           x={selectionBounds.x - 6}
           y={selectionBounds.y - 6}
           width={selectionBounds.width + 12}
           height={selectionBounds.height + 12}
           fill="none"
-          stroke="#93c5fd"
-          strokeWidth={2.5}
-          strokeDasharray="12 8"
+          stroke={multiGroupStrokeColor}
+          strokeWidth={2}
+          strokeDasharray="10 6"
           vectorEffect="non-scaling-stroke"
-          rx={10}
+          rx={8}
         />
       ) : null}
+
+      {/* Marquee selection rect */}
       {marqueeRect ? (
         <rect
           x={marqueeRect.x}
           y={marqueeRect.y}
           width={marqueeRect.width}
           height={marqueeRect.height}
-          fill="rgba(96,165,250,0.12)"
+          fill="rgba(96,165,250,0.08)"
           stroke="#60a5fa"
-          strokeWidth={2}
+          strokeWidth={1.5}
           strokeDasharray="6 4"
           vectorEffect="non-scaling-stroke"
           rx={4}
         />
       ) : null}
+
+      {/* Transform handles — only in select mode */}
       {selectionBounds && mode === 'select' ? (
         <>
+          {/* Rotation handle */}
           {rotationHandle ? (
             <>
               <line
@@ -345,36 +365,70 @@ export function CanvasOverlayLayer() {
                 x2={rotationHandle.x}
                 y2={rotationHandle.y}
                 stroke="#60a5fa"
-                strokeWidth={2}
+                strokeWidth={1.5}
+                strokeDasharray="3 3"
                 vectorEffect="non-scaling-stroke"
               />
+              {/* Hit area — larger invisible circle for easier touch targeting */}
+              <circle
+                cx={rotationHandle.x}
+                cy={rotationHandle.y}
+                r={handleRadius * 1.5}
+                fill="transparent"
+                style={{ pointerEvents: 'all', cursor: 'grab' }}
+                onPointerDown={startRotate}
+              />
+              {/* Visible handle */}
               <circle
                 cx={rotationHandle.x}
                 cy={rotationHandle.y}
                 r={handleRadius}
-                fill="#1e293b"
+                fill="#0f172a"
                 stroke="#60a5fa"
                 strokeWidth={2}
                 vectorEffect="non-scaling-stroke"
-                style={{ pointerEvents: 'all', cursor: 'grab' }}
-                onPointerDown={startRotate}
+                style={{ pointerEvents: 'none' }}
+              />
+              {/* Inner dot to signal rotation affordance */}
+              <circle
+                cx={rotationHandle.x}
+                cy={rotationHandle.y}
+                r={handleRadius * 0.35}
+                fill="#60a5fa"
+                style={{ pointerEvents: 'none' }}
               />
             </>
           ) : null}
-          {handles.map((item) => (
-            <circle
-              key={item.handle}
-              cx={item.x}
-              cy={item.y}
-              r={item.handle.length === 1 ? handleRadius * 0.9 : handleRadius}
-              fill="#0f172a"
-              stroke="#60a5fa"
-              strokeWidth={2}
-              vectorEffect="non-scaling-stroke"
-              style={{ pointerEvents: 'all', cursor: getHandleCursor(item.handle) }}
-              onPointerDown={(event) => startResize(event, item.handle)}
-            />
-          ))}
+
+          {/* Resize handles */}
+          {handles.map((item) => {
+            const corner = isCornerHandle(item.handle)
+            const r = corner ? handleRadius : handleRadius * 0.8
+            return (
+              <g key={item.handle}>
+                {/* Large invisible hit area for touch comfort */}
+                <circle
+                  cx={item.x}
+                  cy={item.y}
+                  r={r * 2}
+                  fill="transparent"
+                  style={{ pointerEvents: 'all', cursor: getHandleCursor(item.handle) }}
+                  onPointerDown={(event) => startResize(event, item.handle)}
+                />
+                {/* Visible handle */}
+                <circle
+                  cx={item.x}
+                  cy={item.y}
+                  r={r}
+                  fill="#ffffff"
+                  stroke="#1d4ed8"
+                  strokeWidth={corner ? 2 : 1.5}
+                  vectorEffect="non-scaling-stroke"
+                  style={{ pointerEvents: 'none' }}
+                />
+              </g>
+            )
+          })}
         </>
       ) : null}
     </svg>

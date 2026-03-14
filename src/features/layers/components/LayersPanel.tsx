@@ -8,7 +8,203 @@ function uniqueIds(ids: string[]) {
 }
 
 function labelForNode(node: SvgNode) {
-  return node.name ?? (node.type === 'group' ? 'Group' : node.type)
+  if (node.name) return node.name
+  if (node.type === 'group') return 'Group'
+  return node.type.charAt(0).toUpperCase() + node.type.slice(1)
+}
+
+/** Single-character glyph used as a type indicator */
+function typeGlyph(type: SvgNode['type']): string {
+  switch (type) {
+    case 'group': return 'G'
+    case 'rect': return 'R'
+    case 'circle': return 'C'
+    case 'ellipse': return 'E'
+    case 'line': return 'L'
+    case 'path': return 'P'
+    case 'text': return 'T'
+    case 'image': return 'I'
+    default: return type.charAt(0).toUpperCase()
+  }
+}
+
+/** Color for the type badge background */
+function typeBadgeColor(type: SvgNode['type']): string {
+  switch (type) {
+    case 'group': return 'rgba(250,204,21,0.18)'
+    case 'rect': return 'rgba(96,165,250,0.18)'
+    case 'circle':
+    case 'ellipse': return 'rgba(167,139,250,0.18)'
+    case 'path': return 'rgba(52,211,153,0.18)'
+    case 'text': return 'rgba(251,146,60,0.18)'
+    default: return 'rgba(255,255,255,0.1)'
+  }
+}
+
+function typeBadgeTextColor(type: SvgNode['type']): string {
+  switch (type) {
+    case 'group': return '#fcd34d'
+    case 'rect': return '#93c5fd'
+    case 'circle':
+    case 'ellipse': return '#c4b5fd'
+    case 'path': return '#6ee7b7'
+    case 'text': return '#fdba74'
+    default: return 'rgba(255,255,255,0.7)'
+  }
+}
+
+interface LayerRowProps {
+  node: SvgNode
+  depth: number
+  isSelected: boolean
+  isLastChild: boolean
+  onSelect: (event: MouseEvent<HTMLButtonElement>, id: string) => void
+}
+
+function LayerRow({ node, depth, isSelected, onSelect }: LayerRowProps) {
+  const hasChildren = Boolean(node.children?.length)
+  const childCount = node.children?.length ?? 0
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column' }}>
+      <button
+        onClick={(event) => onSelect(event, node.id)}
+        style={{
+          position: 'relative',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          paddingLeft: 10 + depth * 16,
+          paddingRight: 10,
+          height: 44,
+          borderRadius: 10,
+          background: isSelected ? 'rgba(96,165,250,0.14)' : 'transparent',
+          border: isSelected ? '1px solid rgba(96,165,250,0.3)' : '1px solid transparent',
+          textAlign: 'left',
+          width: '100%',
+          flexShrink: 0
+        }}
+      >
+        {/* Depth indicator line */}
+        {depth > 0 && (
+          <span
+            style={{
+              position: 'absolute',
+              left: 10 + (depth - 1) * 16 + 7,
+              top: 0,
+              bottom: 0,
+              width: 1,
+              background: 'rgba(255,255,255,0.12)'
+            }}
+          />
+        )}
+
+        {/* Left accent for selected */}
+        {isSelected && (
+          <span
+            style={{
+              position: 'absolute',
+              left: 0,
+              top: 6,
+              bottom: 6,
+              width: 3,
+              borderRadius: 2,
+              background: '#60a5fa'
+            }}
+          />
+        )}
+
+        {/* Type badge */}
+        <span
+          style={{
+            width: 22,
+            height: 22,
+            borderRadius: 6,
+            background: typeBadgeColor(node.type),
+            color: typeBadgeTextColor(node.type),
+            fontSize: 11,
+            fontWeight: 700,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexShrink: 0,
+            letterSpacing: 0
+          }}
+        >
+          {typeGlyph(node.type)}
+        </span>
+
+        {/* Label */}
+        <span
+          style={{
+            flex: 1,
+            fontSize: 13,
+            fontWeight: isSelected ? 600 : 400,
+            color: isSelected ? '#e2e8f0' : 'rgba(255,255,255,0.85)',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            minWidth: 0
+          }}
+        >
+          {labelForNode(node)}
+        </span>
+
+        {/* Child count badge for groups */}
+        {hasChildren && (
+          <span
+            style={{
+              fontSize: 11,
+              fontWeight: 500,
+              color: 'rgba(255,255,255,0.4)',
+              background: 'rgba(255,255,255,0.07)',
+              borderRadius: 6,
+              padding: '1px 6px',
+              flexShrink: 0
+            }}
+          >
+            {childCount}
+          </span>
+        )}
+      </button>
+
+      {/* Children */}
+      {hasChildren &&
+        node.children!.map((child, idx) => (
+          <ChildRows
+            key={child.id}
+            node={child}
+            depth={depth + 1}
+            isLastChild={idx === (node.children!.length - 1)}
+            onSelect={onSelect}
+          />
+        ))}
+    </div>
+  )
+}
+
+/** Thin wrapper so we can pass isSelected from the panel context */
+function ChildRows({
+  node,
+  depth,
+  isLastChild,
+  onSelect
+}: {
+  node: SvgNode
+  depth: number
+  isLastChild: boolean
+  onSelect: (event: MouseEvent<HTMLButtonElement>, id: string) => void
+}) {
+  const isSelected = useEditorStore((s) => s.selection.selectedNodeIds.includes(node.id))
+  return (
+    <LayerRow
+      node={node}
+      depth={depth}
+      isSelected={isSelected}
+      isLastChild={isLastChild}
+      onSelect={onSelect}
+    />
+  )
 }
 
 export function LayersPanel() {
@@ -29,39 +225,6 @@ export function LayersPanel() {
     setSelection([id])
   }
 
-  const renderNodeRow = (node: SvgNode, depth = 0) => {
-    const isSelected = selectedIds.includes(node.id)
-    const hasChildren = Boolean(node.children?.length)
-
-    return (
-      <div key={node.id} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        <button
-          onClick={(event) => handleSelect(event, node.id)}
-          style={{
-            marginLeft: depth * 12,
-            padding: '8px 10px',
-            borderRadius: 10,
-            background: isSelected ? 'rgba(96,165,250,0.18)' : 'rgba(255,255,255,0.04)',
-            fontSize: 12,
-            textAlign: 'left',
-            border: isSelected ? '1px solid rgba(147,197,253,0.4)' : '1px solid transparent',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: 8
-          }}
-        >
-          <span style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-            <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase' }}>{node.type}</span>
-            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{labelForNode(node)}</span>
-          </span>
-          {hasChildren ? <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)' }}>{node.children?.length}</span> : null}
-        </button>
-        {hasChildren ? node.children!.map((child) => renderNodeRow(child, depth + 1)) : null}
-      </div>
-    )
-  }
-
   return (
     <Drawer.Root open={open} onOpenChange={setOpen}>
       <Drawer.Portal>
@@ -79,32 +242,85 @@ export function LayersPanel() {
             bottom: 0,
             left: 0,
             right: 0,
-            maxHeight: '70dvh',
-            borderTopLeftRadius: 16,
-            borderTopRightRadius: 16,
-            background: 'rgba(17,17,17,0.98)',
-            backdropFilter: 'blur(12px)',
-            padding: '8px 12px 12px',
-            paddingBottom: 'var(--sai-bottom, 12px)',
+            maxHeight: '72dvh',
+            borderTopLeftRadius: 20,
+            borderTopRightRadius: 20,
+            background: 'rgba(18,18,18,0.98)',
+            backdropFilter: 'blur(16px)',
+            paddingBottom: 'calc(var(--sai-bottom, 0px) + 8px)',
             zIndex: 50,
             display: 'flex',
             flexDirection: 'column',
-            outline: 'none'
+            outline: 'none',
+            boxShadow: '0 -4px 32px rgba(0,0,0,0.5)'
           }}
         >
-          <Drawer.Handle style={{ background: 'rgba(255,255,255,0.3)', marginBottom: 8 }} />
-          <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-            <div style={{ fontSize: 14, fontWeight: 700 }}>Layers</div>
-            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.6)' }}>{selectedIds.length} selected</div>
-          </div>
-          <div style={{ overflowY: 'auto', flex: 1 }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {!nodes || nodes.length === 0 ? (
-                <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.7)' }}>No layers yet</div>
-              ) : (
-                nodes.map((node) => renderNodeRow(node))
-              )}
+          <Drawer.Handle
+            style={{
+              background: 'rgba(255,255,255,0.2)',
+              marginTop: 8,
+              marginBottom: 0
+            }}
+          />
+
+          {/* Header */}
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              padding: '12px 16px 8px'
+            }}
+          >
+            <div style={{ fontSize: 15, fontWeight: 700, color: '#ffffff' }}>Layers</div>
+            <div
+              style={{
+                fontSize: 12,
+                color: selectedIds.length > 0 ? '#93c5fd' : 'rgba(255,255,255,0.4)',
+                fontWeight: selectedIds.length > 0 ? 600 : 400
+              }}
+            >
+              {selectedIds.length > 0
+                ? `${selectedIds.length} selected`
+                : `${nodes?.length ?? 0} layer${(nodes?.length ?? 0) !== 1 ? 's' : ''}`}
             </div>
+          </div>
+
+          {/* Layer list */}
+          <div style={{ overflowY: 'auto', flex: 1, padding: '4px 8px 4px' }}>
+            {!nodes || nodes.length === 0 ? (
+              <div
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: '32px 16px',
+                  gap: 8
+                }}
+              >
+                <span style={{ fontSize: 28 }}>□</span>
+                <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)', textAlign: 'center' }}>
+                  No layers yet.{'\n'}Add a rectangle to get started.
+                </span>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                {nodes.map((node, idx) => {
+                  const isSelected = selectedIds.includes(node.id)
+                  return (
+                    <LayerRow
+                      key={node.id}
+                      node={node}
+                      depth={0}
+                      isSelected={isSelected}
+                      isLastChild={idx === nodes.length - 1}
+                      onSelect={handleSelect}
+                    />
+                  )
+                })}
+              </div>
+            )}
           </div>
         </Drawer.Content>
       </Drawer.Portal>

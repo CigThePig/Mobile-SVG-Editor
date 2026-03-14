@@ -3,14 +3,16 @@ import { createAndSaveDocument, saveDocument } from '@/db/dexie/queries'
 import { useEditorStore } from '@/stores/editorStore'
 import { useHistoryStore } from '@/stores/historyStore'
 
-const iconBtn = (active = false): React.CSSProperties => ({
-  width: 36,
-  height: 36,
+const iconBtn = (active = false, disabled = false): React.CSSProperties => ({
+  width: 40,
+  height: 40,
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
-  borderRadius: 8,
-  background: active ? 'rgba(96,165,250,0.25)' : 'rgba(255,255,255,0.06)'
+  borderRadius: 10,
+  background: active ? 'rgba(96,165,250,0.22)' : 'rgba(255,255,255,0.07)',
+  color: active ? '#93c5fd' : disabled ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.9)',
+  flexShrink: 0
 })
 
 export function EditorTopBar() {
@@ -45,6 +47,10 @@ export function EditorTopBar() {
     setCamera(clampedZoom, nextPanX, nextPanY)
   }
 
+  const handleZoomReset = () => {
+    setCamera(1, 0, 0)
+  }
+
   const handleNew = async () => {
     const doc = await createAndSaveDocument('Untitled SVG')
     replaceDocument(doc)
@@ -76,8 +82,7 @@ export function EditorTopBar() {
   return (
     <header
       style={{
-        height: 44,
-        paddingTop: 'var(--sai-top, 0px)',
+        height: 52,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
@@ -88,44 +93,97 @@ export function EditorTopBar() {
         flexShrink: 0
       }}
     >
-      {/* Left group */}
+      {/* Left group: nav + layers */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
         <button style={iconBtn()} aria-label="Back">
-          <ArrowLeft size={18} />
+          <ArrowLeft size={20} />
         </button>
         <button style={iconBtn()} onClick={() => void handleNew()} aria-label="New document">
-          <FilePlus size={18} />
+          <FilePlus size={20} />
         </button>
         <button style={iconBtn(leftPanelOpen)} onClick={toggleLeftPanel} aria-label="Toggle layers">
-          <Layers size={18} />
+          <Layers size={20} color={leftPanelOpen ? '#93c5fd' : undefined} />
         </button>
       </div>
 
-      {/* Center title */}
-      <div style={{ flex: 1, fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'center', minWidth: 0 }}>
+      {/* Center: title */}
+      <div
+        style={{
+          flex: 1,
+          fontSize: 14,
+          fontWeight: 600,
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+          textAlign: 'center',
+          minWidth: 0,
+          color: 'rgba(255,255,255,0.9)',
+          letterSpacing: '-0.01em'
+        }}
+      >
         {title}
       </div>
 
-      {/* Right group */}
+      {/* Right group: undo/redo | zoom | inspector | save */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-        <button disabled={!canUndo} onClick={() => void handleUndo()} style={{ ...iconBtn(), opacity: canUndo ? 1 : 0.35 }} aria-label="Undo">
+        <button
+          disabled={!canUndo}
+          onClick={() => void handleUndo()}
+          style={iconBtn(false, !canUndo)}
+          aria-label="Undo"
+        >
           <Undo2 size={18} />
         </button>
-        <button disabled={!canRedo} onClick={() => void handleRedo()} style={{ ...iconBtn(), opacity: canRedo ? 1 : 0.35 }} aria-label="Redo">
+        <button
+          disabled={!canRedo}
+          onClick={() => void handleRedo()}
+          style={iconBtn(false, !canRedo)}
+          aria-label="Redo"
+        >
           <Redo2 size={18} />
         </button>
-        <button onClick={() => zoomAroundCenter(zoom - 0.1)} style={iconBtn()} aria-label="Zoom out">
-          <ZoomOut size={16} />
-        </button>
-        <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.7)', minWidth: 36, textAlign: 'center' }}>{Math.round(zoom * 100)}%</span>
-        <button onClick={() => zoomAroundCenter(zoom + 0.1)} style={iconBtn()} aria-label="Zoom in">
-          <ZoomIn size={16} />
-        </button>
+
+        {/* Zoom controls: out | label (tap to reset) | in */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 0,
+            background: 'rgba(255,255,255,0.07)',
+            borderRadius: 10,
+            padding: '0 2px'
+          }}
+        >
+          <button
+            onClick={() => zoomAroundCenter(zoom - 0.1)}
+            style={{ width: 30, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8, flexShrink: 0 }}
+            aria-label="Zoom out"
+          >
+            <ZoomOut size={15} />
+          </button>
+          <button
+            onClick={handleZoomReset}
+            style={{ height: 36, minWidth: 38, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 2px' }}
+            aria-label="Reset zoom"
+          >
+            <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.7)', fontVariantNumeric: 'tabular-nums' }}>
+              {Math.round(zoom * 100)}%
+            </span>
+          </button>
+          <button
+            onClick={() => zoomAroundCenter(zoom + 0.1)}
+            style={{ width: 30, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8, flexShrink: 0 }}
+            aria-label="Zoom in"
+          >
+            <ZoomIn size={15} />
+          </button>
+        </div>
+
         <button style={iconBtn(rightPanelOpen)} onClick={toggleRightPanel} aria-label="Toggle inspector">
-          <SlidersHorizontal size={18} />
+          <SlidersHorizontal size={20} color={rightPanelOpen ? '#93c5fd' : undefined} />
         </button>
         <button onClick={() => void handleSave()} style={iconBtn()} aria-label="Save">
-          <Save size={18} />
+          <Save size={20} />
         </button>
       </div>
     </header>

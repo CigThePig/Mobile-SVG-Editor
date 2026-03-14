@@ -27,8 +27,9 @@ export function EditorTopBar() {
   const toggleRightPanel = useEditorStore((s) => s.toggleRightPanel)
   const undo = useHistoryStore((s) => s.undo)
   const redo = useHistoryStore((s) => s.redo)
-  const canUndo = useHistoryStore((s) => s.canUndo())
-  const canRedo = useHistoryStore((s) => s.canRedo())
+  const clearHistory = useHistoryStore((s) => s.clear)
+  const canUndo = useHistoryStore((s) => s.undoStack.length > 0)
+  const canRedo = useHistoryStore((s) => s.redoStack.length > 0)
 
   const zoomAroundCenter = (nextZoom: number) => {
     const clampedZoom = Math.min(4, Math.max(0.25, nextZoom))
@@ -48,6 +49,7 @@ export function EditorTopBar() {
     const doc = await createAndSaveDocument('Untitled SVG')
     replaceDocument(doc)
     clearSelection()
+    clearHistory()
   }
 
   const handleSave = async () => {

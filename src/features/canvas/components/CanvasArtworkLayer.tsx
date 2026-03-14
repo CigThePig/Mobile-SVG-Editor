@@ -13,7 +13,7 @@ import type {
   TextNode,
   TransformModel
 } from '@/model/nodes/nodeTypes'
-import { cloneDocument, moveNodesInDocument } from '@/features/documents/utils/documentMutations'
+import { cloneDocument, getNodeById, moveNodesInDocument } from '@/features/documents/utils/documentMutations'
 import { clientPointToDocumentPoint, getEffectiveViewBox } from '@/features/canvas/utils/viewBox'
 import { boundsIntersect, collectSelectableNodes, getNodeBounds, normalizeBounds, type NodeBounds } from '@/features/selection/utils/nodeBounds'
 import { saveDocument } from '@/db/dexie/queries'
@@ -143,8 +143,15 @@ type InteractionState =
       nodeIds: string[]
       originX: number
       originY: number
+      // Pixel-space origin for drag threshold measurement
+      originClientX: number
+      originClientY: number
       startDocument: SvgDocument
       moved: boolean
+      // When a selected item in a multi-select is tapped (not dragged), collapse
+      // selection to this single id on pointer-up. This defers the deselect until
+      // we know the gesture was a tap rather than a drag.
+      pendingSelectionCollapse: string | undefined
     }
   | {
       kind: 'pan-canvas'
@@ -205,6 +212,20 @@ function uniqueIds(ids: string[]) {
   return Array.from(new Set(ids))
 }
 
+/**
+ * Returns true if `descendantId` is somewhere inside the subtree of any of the
+ * given `ancestorIds` (which must be group nodes). Used to detect clicks on
+ * children when a parent group is already selected.
+ */
+function isDescendantOfSelectedGroup(root: SvgNode, ancestorIds: string[], descendantId: string): boolean {
+  for (const ancestorId of ancestorIds) {
+    if (ancestorId === descendantId) continue
+    const ancestor = getNodeById(root, ancestorId)
+    if (ancestor?.type === 'group' && getNodeById(ancestor, descendantId)) return true
+  }
+  return false
+}
+
 export function CanvasArtworkLayer() {
   const document = useEditorStore((s) => s.activeDocument)
   const view = useEditorStore((s) => s.view)
@@ -227,10 +248,15 @@ export function CanvasArtworkLayer() {
     const interaction = interactionRef.current
     if (!interaction) return
 
-    if (interaction.kind === 'drag-selection' && interaction.moved) {
-      const afterDocument = cloneDocument(useEditorStore.getState().activeDocument)
-      pushSnapshot(interaction.nodeIds.length > 1 ? 'Move Selection' : 'Move Object', interaction.startDocument, afterDocument)
-      await saveDocument(afterDocument)
+    if (interaction.kind === 'drag-selection') {
+      if (interaction.moved) {
+        const afterDocument = cloneDocument(useEditorStore.getState().activeDocument)
+        pushSnapshot(interaction.nodeIds.length > 1 ? 'Move Selection' : 'Move Object', interaction.startDocument, afterDocument)
+        await saveDocument(afterDocument)
+      } else if (interaction.pendingSelectionCollapse) {
+        // Tap on selected item in multi-select: collapse to single
+        setSelection([interaction.pendingSelectionCollapse])
+      }
     }
 
     if (interaction.kind === 'marquee-select') {
@@ -238,7 +264,7 @@ export function CanvasArtworkLayer() {
     }
 
     interactionRef.current = null
-  }, [pushSnapshot, setMarqueeRect])
+  }, [pushSnapshot, setMarqueeRect, setSelection])
 
   const maybeBeginPinch = useCallback(
     (clientX?: number, clientY?: number) => {
@@ -302,7 +328,10 @@ export function CanvasArtworkLayer() {
         const point = clientPointToDocumentPoint(event.clientX, event.clientY, svg, effectiveViewBox)
         const dx = point.x - interaction.originX
         const dy = point.y - interaction.originY
-        if (Math.abs(dx) > 0.01 || Math.abs(dy) > 0.01) interaction.moved = true
+        // Use a pixel-space threshold so a gentle tap doesn't register as a drag
+        const clientDx = event.clientX - interaction.originClientX
+        const clientDy = event.clientY - interaction.originClientY
+        if (Math.hypot(clientDx, clientDy) > 5) interaction.moved = true
         const nextDocument = moveNodesInDocument(interaction.startDocument, interaction.nodeIds, dx, dy)
         replaceDocument(nextDocument)
         return
@@ -327,8 +356,11 @@ export function CanvasArtworkLayer() {
           width: point.x - interaction.origin.x,
           height: point.y - interaction.origin.y
         })
-        interaction.moved = rect.width > 1 || rect.height > 1
-        setMarqueeRect(rect)
+        // Only show and record the marquee once it has a meaningful size
+        if (rect.width > 1 || rect.height > 1) {
+          interaction.moved = true
+          setMarqueeRect(rect)
+        }
       }
     }
 
@@ -384,13 +416,33 @@ export function CanvasArtworkLayer() {
 
     const point = clientPointToDocumentPoint(event.clientX, event.clientY, svg, effectiveViewBox)
     const additive = multiSelectEnabled || event.shiftKey
+
+    // If the clicked node is inside an already-selected group, don't change the
+    // selection — just start dragging the group(s).
+    if (!additive && isDescendantOfSelectedGroup(document.root, selectedIds, id)) {
+      if (mode === 'select') {
+        interactionRef.current = {
+          kind: 'drag-selection',
+          nodeIds: selectedIds,
+          originX: point.x,
+          originY: point.y,
+          originClientX: event.clientX,
+          originClientY: event.clientY,
+          startDocument: cloneDocument(document),
+          moved: false,
+          pendingSelectionCollapse: undefined
+        }
+      }
+      return
+    }
+
     const isAlreadySelected = selectedIds.includes(id)
     const nextSelection = additive
       ? isAlreadySelected
         ? selectedIds.filter((existing) => existing !== id)
         : uniqueIds([...selectedIds, id])
-      : isAlreadySelected && selectedIds.length === 1
-        ? selectedIds
+      : isAlreadySelected
+        ? selectedIds  // keep current selection; deferred collapse on tap (see finishInteraction)
         : [id]
     setSelection(nextSelection)
     setMarqueeRect(null)
@@ -401,8 +453,13 @@ export function CanvasArtworkLayer() {
         nodeIds: nextSelection,
         originX: point.x,
         originY: point.y,
+        originClientX: event.clientX,
+        originClientY: event.clientY,
         startDocument: cloneDocument(document),
-        moved: false
+        moved: false,
+        // If this is a tap on a selected item in a multi-select (non-additive),
+        // we'll collapse to just this item after confirming no drag occurred.
+        pendingSelectionCollapse: isAlreadySelected && !additive && selectedIds.length > 1 ? id : undefined
       }
     }
   }
@@ -438,7 +495,8 @@ export function CanvasArtworkLayer() {
         append: multiSelectEnabled || event.shiftKey,
         moved: false
       }
-      setMarqueeRect({ x: point.x, y: point.y, width: 1, height: 1 })
+      // Don't show the marquee rect yet — wait until pointer moves past threshold
+      // to avoid a 1×1 flash on every background tap.
       return
     }
 

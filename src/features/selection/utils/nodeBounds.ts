@@ -48,7 +48,9 @@ function approxPathBounds(d: string): NodeBounds | null {
   let i = 0
 
   function num(): number {
-    return Number(tokens[i++] ?? 0)
+    // tokens is guaranteed non-null here: checked via `if (!tokens) return null` above,
+    // but TypeScript's control-flow narrowing doesn't carry into closures.
+    return Number(tokens![i++] ?? 0)
   }
 
   while (i < tokens.length) {

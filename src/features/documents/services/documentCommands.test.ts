@@ -46,7 +46,7 @@ function rootChildren(doc: SvgDocument): SvgNode[] {
   return (doc.root as RootNode).children
 }
 
-function runCommand<T>(command: { run: (ctx: { document: SvgDocument }, payload: T) => { document: SvgDocument; selectionIds: string[] } }, doc: SvgDocument, payload: T) {
+function runCommand<T>(command: { run: (ctx: { document: SvgDocument }, payload: T) => { document: SvgDocument; selectionIds?: string[] } }, doc: SvgDocument, payload: T) {
   return command.run({ document: doc }, payload)
 }
 
@@ -81,7 +81,8 @@ describe('groupSelectionCommand', () => {
 describe('ungroupSelectionCommand', () => {
   it('restores children to parent level', () => {
     const doc = makeDoc([makeRect('r1', 0, 0), makeRect('r2', 200, 0)])
-    const { document: grouped, selectionIds: [groupId] } = runCommand(groupSelectionCommand, doc, { nodeIds: ['r1', 'r2'] })
+    const { document: grouped, selectionIds: groupedSels } = runCommand(groupSelectionCommand, doc, { nodeIds: ['r1', 'r2'] })
+    const [groupId] = groupedSels!
     const { document: ungrouped, selectionIds } = runCommand(ungroupSelectionCommand, grouped, { nodeIds: [groupId] })
     expect(rootChildren(ungrouped)).toHaveLength(2)
     expect(selectionIds).toContain('r1')
@@ -96,14 +97,15 @@ describe('ungroupSelectionCommand', () => {
     const doc = makeDoc([r1, r2])
 
     // Group them
-    const { document: grouped, selectionIds: [groupId] } = runCommand(groupSelectionCommand, doc, { nodeIds: ['r1', 'r2'] })
+    const { document: grouped, selectionIds: groupedSels2 } = runCommand(groupSelectionCommand, doc, { nodeIds: ['r1', 'r2'] })
+    const [groupId] = groupedSels2!
 
     // Simulate the group having been moved by 100, 50 (translate only, no rotation)
     const movedGrouped: SvgDocument = {
       ...grouped,
       root: {
         ...grouped.root,
-        children: grouped.root.children.map((n) =>
+        children: (grouped.root as RootNode).children.map((n) =>
           n.id === groupId
             ? { ...n, transform: { translateX: 100, translateY: 50 } }
             : n
@@ -112,7 +114,7 @@ describe('ungroupSelectionCommand', () => {
     }
 
     // Capture world bounds before ungroup
-    const groupNode = movedGrouped.root.children.find((n) => n.id === groupId)!
+    const groupNode = (movedGrouped.root as RootNode).children.find((n) => n.id === groupId)!
     const childR1 = (groupNode as GroupNode).children.find((c) => c.id === 'r1')!
     const childR2 = (groupNode as GroupNode).children.find((c) => c.id === 'r2')!
     // The group's transform should push children's world position by (100, 50)
@@ -142,7 +144,8 @@ describe('ungroupSelectionCommand', () => {
 
   it('selects ungrouped children after ungroup', () => {
     const doc = makeDoc([makeRect('r1', 0, 0), makeRect('r2', 100, 0)])
-    const { document: grouped, selectionIds: [groupId] } = runCommand(groupSelectionCommand, doc, { nodeIds: ['r1', 'r2'] })
+    const { document: grouped, selectionIds: groupedSels3 } = runCommand(groupSelectionCommand, doc, { nodeIds: ['r1', 'r2'] })
+    const [groupId] = groupedSels3!
     const { selectionIds } = runCommand(ungroupSelectionCommand, grouped, { nodeIds: [groupId] })
     expect(selectionIds).toContain('r1')
     expect(selectionIds).toContain('r2')

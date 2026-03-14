@@ -1,4 +1,5 @@
 import type { MouseEvent } from 'react'
+import { Drawer } from 'vaul'
 import type { SvgNode } from '@/model/nodes/nodeTypes'
 import { useEditorStore } from '@/stores/editorStore'
 
@@ -11,6 +12,8 @@ function labelForNode(node: SvgNode) {
 }
 
 export function LayersPanel() {
+  const open = useEditorStore((s) => s.ui.leftPanelOpen)
+  const setOpen = useEditorStore((s) => s.setLeftPanelOpen)
   const nodes = useEditorStore((s) => s.activeDocument.root.children)
   const selectedIds = useEditorStore((s) => s.selection.selectedNodeIds)
   const multiSelectEnabled = useEditorStore((s) => s.ui.multiSelectEnabled)
@@ -59,34 +62,52 @@ export function LayersPanel() {
     )
   }
 
-  if (!nodes) return null
-
   return (
-    <aside
-      style={{
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        width: 280,
-        height: '100%',
-        padding: 12,
-        borderRight: '1px solid rgba(255,255,255,0.1)',
-        background: 'rgba(17,17,17,0.95)',
-        backdropFilter: 'blur(12px)',
-        overflowY: 'auto'
-      }}
-    >
-      <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-        <div style={{ fontSize: 14, fontWeight: 700 }}>Layers</div>
-        <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.6)' }}>{selectedIds.length} selected</div>
-      </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {nodes.length === 0 ? (
-          <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.7)' }}>No layers yet</div>
-        ) : (
-          nodes.map((node) => renderNodeRow(node))
-        )}
-      </div>
-    </aside>
+    <Drawer.Root open={open} onOpenChange={setOpen}>
+      <Drawer.Portal>
+        <Drawer.Overlay
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.5)',
+            zIndex: 40
+          }}
+        />
+        <Drawer.Content
+          style={{
+            position: 'fixed',
+            bottom: 0,
+            left: 0,
+            right: 0,
+            maxHeight: '70dvh',
+            borderTopLeftRadius: 16,
+            borderTopRightRadius: 16,
+            background: 'rgba(17,17,17,0.98)',
+            backdropFilter: 'blur(12px)',
+            padding: '8px 12px 12px',
+            paddingBottom: 'var(--sai-bottom, 12px)',
+            zIndex: 50,
+            display: 'flex',
+            flexDirection: 'column',
+            outline: 'none'
+          }}
+        >
+          <Drawer.Handle style={{ background: 'rgba(255,255,255,0.3)', marginBottom: 8 }} />
+          <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+            <div style={{ fontSize: 14, fontWeight: 700 }}>Layers</div>
+            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.6)' }}>{selectedIds.length} selected</div>
+          </div>
+          <div style={{ overflowY: 'auto', flex: 1 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {!nodes || nodes.length === 0 ? (
+                <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.7)' }}>No layers yet</div>
+              ) : (
+                nodes.map((node) => renderNodeRow(node))
+              )}
+            </div>
+          </div>
+        </Drawer.Content>
+      </Drawer.Portal>
+    </Drawer.Root>
   )
 }

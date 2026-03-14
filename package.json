@@ -93,7 +93,7 @@
     "use-undo": "latest",
     "valtio": "latest",
     "vaul": "latest",
-    "vite-plugin-pwa": "latest",
+    "vite-plugin-pwa": "^1.2.0",
     "webfontloader": "latest",
     "workbox-window": "latest",
     "xml-formatter": "latest",
@@ -111,13 +111,13 @@
     "@types/react": "latest",
     "@types/react-dom": "latest",
     "@types/node": "latest",
-    "@vitejs/plugin-react": "latest",
+    "@vitejs/plugin-react": "^5.2.0",
     "happy-dom": "latest",
     "jsdom": "latest",
     "msw": "latest",
     "playwright": "latest",
     "typescript": "latest",
-    "vite": "latest",
+    "vite": "^7.0.0",
     "vitest": "latest"
   }
 }

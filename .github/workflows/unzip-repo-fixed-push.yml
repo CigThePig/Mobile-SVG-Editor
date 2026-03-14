@@ -1,0 +1,133 @@
+name: Unzip Repo Zip
+
+on:
+  workflow_dispatch:
+    inputs:
+      zip_name:
+        description: "Optional zip filename in repo root (example: mobile-svg-editor-fixed-pages-ready.zip)"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+jobs:
+  unzip:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.ZIP_OPEN }}
+          persist-credentials: false
+
+      - name: Find zip file
+        id: find_zip
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          INPUT_ZIP="${{ github.event.inputs.zip_name }}"
+
+          if [ -n "$INPUT_ZIP" ]; then
+            if [ ! -f "$INPUT_ZIP" ]; then
+              echo "Specified zip file not found: $INPUT_ZIP"
+              exit 1
+            fi
+            ZIP_FILE="$INPUT_ZIP"
+          else
+            mapfile -t ZIPS < <(find . -maxdepth 1 -type f -name "*.zip" | sort)
+
+            if [ "${#ZIPS[@]}" -eq 0 ]; then
+              echo "No zip file found in repo root."
+              exit 1
+            fi
+
+            if [ "${#ZIPS[@]}" -gt 1 ]; then
+              echo "Multiple zip files found in repo root. Run workflow again and provide zip_name."
+              printf 'Found zips:\n'
+              printf '%s\n' "${ZIPS[@]}"
+              exit 1
+            fi
+
+            ZIP_FILE="${ZIPS[0]}"
+          fi
+
+          ZIP_FILE="${ZIP_FILE#./}"
+
+          echo "Using zip: $ZIP_FILE"
+          echo "zip_file=$ZIP_FILE" >> "$GITHUB_OUTPUT"
+
+      - name: Extract zip into temporary folder
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          rm -rf __unzipped_tmp
+          mkdir -p __unzipped_tmp
+          unzip -o "${{ steps.find_zip.outputs.zip_file }}" -d __unzipped_tmp
+
+      - name: Flatten single top-level wrapper folder if present
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s dotglob nullglob
+
+          ITEMS=(__unzipped_tmp/*)
+
+          if [ "${#ITEMS[@]}" -eq 1 ] && [ -d "${ITEMS[0]}" ]; then
+            echo "Detected single wrapper folder: ${ITEMS[0]}"
+            WRAPPER="${ITEMS[0]}"
+            mv "$WRAPPER"/* __unzipped_tmp/ 2>/dev/null || true
+            rmdir "$WRAPPER" || true
+          else
+            echo "No single wrapper folder detected. Leaving extracted structure as-is."
+          fi
+
+      - name: Copy extracted files into repository root
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s dotglob nullglob
+
+          cp -R __unzipped_tmp/* .
+
+      - name: Clean up temporary folder
+        shell: bash
+        run: |
+          rm -rf __unzipped_tmp
+
+      - name: Show top-level files after extraction
+        shell: bash
+        run: |
+          echo "Top-level files after extraction:"
+          ls -la
+
+      - name: Commit extracted contents
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add -A
+
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+            exit 0
+          fi
+
+          git commit -m "Extract repo zip via GitHub Actions"
+
+      - name: Push with GitHub Actions token
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git"
+          git push origin HEAD:${{ github.ref_name }}

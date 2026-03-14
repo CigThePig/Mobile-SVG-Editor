@@ -214,6 +214,20 @@ function moveNode(node: SvgNode, dx: number, dy: number): SvgNode {
     }
     case 'group': {
       const n = node as GroupNode
+      // If the group has a rotation transform, move via translateX/Y so the drag
+      // direction matches the visual (document-space) direction regardless of rotation.
+      // Without this, moving children's coordinates directly would apply the delta in
+      // the group's rotated local space, causing the group to shift at the wrong angle.
+      if (n.transform?.rotate) {
+        return {
+          ...n,
+          transform: {
+            ...n.transform,
+            translateX: (n.transform.translateX ?? 0) + dx,
+            translateY: (n.transform.translateY ?? 0) + dy
+          }
+        }
+      }
       return { ...n, children: (n.children ?? []).map((child) => moveNode(child, dx, dy)) }
     }
     case 'root': {

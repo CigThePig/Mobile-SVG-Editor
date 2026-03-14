@@ -168,11 +168,5 @@ export function boundsIntersect(a: NodeBounds, b: NodeBounds): boolean {
 }
 
 export function collectSelectableNodes(root: SvgNode): SvgNode[] {
-  const out: SvgNode[] = []
-  const visit = (node: SvgNode) => {
-    if (node.type !== 'root') out.push(node)
-    for (const child of node.children ?? []) visit(child)
-  }
-  visit(root)
-  return out
+  return root.children ?? []
 }

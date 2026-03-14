@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef } from 'react'
 import type { PointerEvent as ReactPointerEvent } from 'react'
 import { getEffectiveViewBox, clientPointToDocumentPoint } from '@/features/canvas/utils/viewBox'
 import { cloneDocument, getNodeById, resizeNodeInDocument, resizeNodesInDocument, rotateNodeInDocument, rotateNodesInDocument } from '@/features/documents/utils/documentMutations'
+import type { SvgDocument } from '@/model/document/documentTypes'
 import { getNodeBounds, getBoundsForNodes, normalizeBounds, type NodeBounds } from '@/features/selection/utils/nodeBounds'
 import { saveDocument } from '@/db/dexie/queries'
 import { useEditorStore } from '@/stores/editorStore'
@@ -13,7 +14,7 @@ type ResizeInteraction = {
   kind: 'resize'
   nodeIds: string[]
   handle: ResizeHandlePosition
-  startDocument: ReturnType<typeof cloneDocument>
+  startDocument: SvgDocument
   startBounds: NodeBounds
   moved: boolean
 }
@@ -21,7 +22,7 @@ type ResizeInteraction = {
 type RotateInteraction = {
   kind: 'rotate'
   nodeIds: string[]
-  startDocument: ReturnType<typeof cloneDocument>
+  startDocument: SvgDocument
   center: { x: number; y: number }
   startPointerAngle: number
   startRotation: number

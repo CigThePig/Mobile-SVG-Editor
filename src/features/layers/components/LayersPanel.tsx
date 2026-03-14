@@ -26,7 +26,7 @@ export function LayersPanel() {
     setSelection([id])
   }
 
-  const renderNodeRow = (node: SvgNode, depth = 0): JSX.Element => {
+  const renderNodeRow = (node: SvgNode, depth = 0) => {
     const isSelected = selectedIds.includes(node.id)
     const hasChildren = Boolean(node.children?.length)
 
@@ -58,6 +58,8 @@ export function LayersPanel() {
       </div>
     )
   }
+
+  if (!nodes) return null
 
   return (
     <aside

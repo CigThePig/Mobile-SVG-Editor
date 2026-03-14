@@ -472,7 +472,7 @@ export function CanvasArtworkLayer() {
       onWheel={handleWheel}
       style={{ touchAction: 'none' }}
     >
-      {document.root.children.map((node) => renderNode(node, selectedIds, handleNodePointerDown))}
+      {document.root.children?.map((node) => renderNode(node, selectedIds, handleNodePointerDown))}
     </svg>
   )
 }

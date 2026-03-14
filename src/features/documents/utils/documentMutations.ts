@@ -13,7 +13,7 @@ import type {
   SvgNode,
   TextNode
 } from '@/model/nodes/nodeTypes'
-import { getNodeBounds, normalizeBounds, type NodeBounds } from '@/features/selection/utils/nodeBounds'
+import { getNodeBounds, getLocalNodeBounds, normalizeBounds, type NodeBounds } from '@/features/selection/utils/nodeBounds'
 
 export function cloneDocument<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T
@@ -363,11 +363,22 @@ function rotatePoint(point: { x: number; y: number }, center: { x: number; y: nu
 }
 
 function rotateNodeAroundPivot(node: SvgNode, deltaDegrees: number, pivot: { x: number; y: number }): SvgNode {
-  const nodeBounds = getNodeBounds(node)
-  const currentCenter = nodeBounds
-    ? { x: nodeBounds.x + nodeBounds.width / 2, y: nodeBounds.y + nodeBounds.height / 2 }
+  // World-space AABB center — used to compute how much the node's position moves.
+  const worldBounds = getNodeBounds(node)
+  const currentCenter = worldBounds
+    ? { x: worldBounds.x + worldBounds.width / 2, y: worldBounds.y + worldBounds.height / 2 }
     : pivot
   const nextCenter = rotatePoint(currentCenter, pivot, deltaDegrees)
+
+  // Local-space center — this is what pivotX/Y must be, because transformBounds
+  // applies pivotX/Y in the node's own (pre-transform) coordinate space.
+  // Using the world-space center here caused progressive drift whenever a node
+  // was rotated around a pivot other than its own centre (e.g. multi-select rotate).
+  const localBounds = getLocalNodeBounds(node)
+  const localCenter = localBounds
+    ? { x: localBounds.x + localBounds.width / 2, y: localBounds.y + localBounds.height / 2 }
+    : currentCenter
+
   const currentTranslateX = node.transform?.translateX ?? 0
   const currentTranslateY = node.transform?.translateY ?? 0
   const currentRotate = node.transform?.rotate ?? 0
@@ -379,8 +390,8 @@ function rotateNodeAroundPivot(node: SvgNode, deltaDegrees: number, pivot: { x: 
       translateX: currentTranslateX + (nextCenter.x - currentCenter.x),
       translateY: currentTranslateY + (nextCenter.y - currentCenter.y),
       rotate: currentRotate + deltaDegrees,
-      pivotX: currentCenter.x,
-      pivotY: currentCenter.y
+      pivotX: localCenter.x,
+      pivotY: localCenter.y
     }
   }
 }

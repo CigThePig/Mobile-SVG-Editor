@@ -1,6 +1,6 @@
 import { nanoid } from 'nanoid'
 import type { SvgDocument } from '@/model/document/documentTypes'
-import type { GroupNode, RootNode, SvgNode, RectNode } from '@/model/nodes/nodeTypes'
+import type { CircleNode, EllipseNode, GroupNode, ImageNode, LineNode, PathNode, PolygonNode, PolylineNode, RootNode, SvgNode, RectNode, TextNode } from '@/model/nodes/nodeTypes'
 import type { EditorCommand } from './commands'
 
 function isContainerNode(node: SvgNode): node is RootNode | GroupNode {
@@ -38,22 +38,96 @@ function replaceChildrenInTree(node: SvgNode, parentId: string, nextChildren: Sv
   }
 }
 
+/**
+ * Bake a pure translation (dx, dy) directly into a node's geometry coordinates,
+ * avoiding any transform accumulation. Falls back to transform for unknown types.
+ */
+function applyTranslateToChildCoords(child: SvgNode, dx: number, dy: number): SvgNode {
+  switch (child.type) {
+    case 'rect': {
+      const n = child as RectNode
+      return { ...n, x: n.x + dx, y: n.y + dy }
+    }
+    case 'circle': {
+      const n = child as CircleNode
+      return { ...n, cx: n.cx + dx, cy: n.cy + dy }
+    }
+    case 'ellipse': {
+      const n = child as EllipseNode
+      return { ...n, cx: n.cx + dx, cy: n.cy + dy }
+    }
+    case 'line': {
+      const n = child as LineNode
+      return { ...n, x1: n.x1 + dx, y1: n.y1 + dy, x2: n.x2 + dx, y2: n.y2 + dy }
+    }
+    case 'polyline': {
+      const n = child as PolylineNode
+      return { ...n, points: n.points.map((p) => ({ x: p.x + dx, y: p.y + dy })) }
+    }
+    case 'polygon': {
+      const n = child as PolygonNode
+      return { ...n, points: n.points.map((p) => ({ x: p.x + dx, y: p.y + dy })) }
+    }
+    case 'text': {
+      const n = child as TextNode
+      return { ...n, x: n.x + dx, y: n.y + dy }
+    }
+    case 'image': {
+      const n = child as ImageNode
+      return { ...n, x: n.x + dx, y: n.y + dy }
+    }
+    default:
+      // For groups or unknown: fall back to accumulating translateX/Y on transform
+      return {
+        ...child,
+        transform: {
+          ...child.transform,
+          translateX: (child.transform?.translateX ?? 0) + dx,
+          translateY: (child.transform?.translateY ?? 0) + dy
+        }
+      }
+  }
+}
+
 function foldTransformIntoChild(child: SvgNode, groupTransform?: GroupNode['transform']): SvgNode {
   if (!groupTransform) return child
 
+  const tx = groupTransform.translateX ?? 0
+  const ty = groupTransform.translateY ?? 0
+  const rotate = groupTransform.rotate ?? 0
+  const scaleX = groupTransform.scaleX ?? 1
+  const scaleY = groupTransform.scaleY ?? 1
+  const skewX = groupTransform.skewX ?? 0
+  const skewY = groupTransform.skewY ?? 0
+
+  // Fast path: group has only a translation (the most common case after moving a
+  // non-rotated group). Bake it directly into child geometry so children end up
+  // with clean coordinates and no accumulated transform.
+  const isTranslateOnly = !rotate && scaleX === 1 && scaleY === 1 && !skewX && !skewY &&
+    groupTransform.pivotX == null && groupTransform.pivotY == null
+  if (isTranslateOnly) {
+    if (!tx && !ty) return child
+    return applyTranslateToChildCoords(child, tx, ty)
+  }
+
+  // General case: combine all transform components.
+  // Note: this is an approximation — translate+rotate compositions are only exact
+  // when both pivots coincide. Known limitation for complex nested transforms.
+  // Critically, we do NOT inherit the group's pivotX/Y onto the child: the group
+  // pivot is in group-local space while child.pivotX/Y must be in child-local space.
   return {
     ...child,
     transform: {
       ...child.transform,
-      translateX: (child.transform?.translateX ?? 0) + (groupTransform.translateX ?? 0),
-      translateY: (child.transform?.translateY ?? 0) + (groupTransform.translateY ?? 0),
-      rotate: (child.transform?.rotate ?? 0) + (groupTransform.rotate ?? 0),
-      scaleX: (child.transform?.scaleX ?? 1) * (groupTransform.scaleX ?? 1),
-      scaleY: (child.transform?.scaleY ?? 1) * (groupTransform.scaleY ?? 1),
-      skewX: (child.transform?.skewX ?? 0) + (groupTransform.skewX ?? 0),
-      skewY: (child.transform?.skewY ?? 0) + (groupTransform.skewY ?? 0),
-      pivotX: groupTransform.pivotX ?? child.transform?.pivotX,
-      pivotY: groupTransform.pivotY ?? child.transform?.pivotY
+      translateX: (child.transform?.translateX ?? 0) + tx,
+      translateY: (child.transform?.translateY ?? 0) + ty,
+      rotate: (child.transform?.rotate ?? 0) + rotate,
+      scaleX: (child.transform?.scaleX ?? 1) * scaleX,
+      scaleY: (child.transform?.scaleY ?? 1) * scaleY,
+      skewX: (child.transform?.skewX ?? 0) + skewX,
+      skewY: (child.transform?.skewY ?? 0) + skewY
+      // pivotX/pivotY: intentionally NOT inherited from group — they are in
+      // different coordinate spaces. Child keeps its own pivot (or none).
     }
   }
 }

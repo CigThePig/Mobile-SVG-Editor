@@ -260,6 +260,10 @@ export function CanvasArtworkLayer() {
   const pinchRef = useRef<PinchState>(null)
   const activePointersRef = useRef<Map<number, PointerSnapshot>>(new Map())
   const effectiveViewBox = useMemo(() => getEffectiveViewBox(document, view), [document, view])
+  const effectiveViewBoxRef = useRef(effectiveViewBox)
+  effectiveViewBoxRef.current = effectiveViewBox
+  const documentRef = useRef(document)
+  documentRef.current = document
 
   const finishInteraction = useCallback(async () => {
     const interaction = interactionRef.current
@@ -333,7 +337,7 @@ export function CanvasArtworkLayer() {
         const [a, b] = pointers
         const midpoint = getMidpoint(a, b)
         const nextZoom = Math.min(4, Math.max(0.25, pinch.startZoom * (getDistance(a, b) / pinch.startDistance)))
-        const result = applyZoomAtClientPoint(svg, document, pinch.anchorDocumentPoint, midpoint.clientX, midpoint.clientY, nextZoom)
+        const result = applyZoomAtClientPoint(svg, documentRef.current, pinch.anchorDocumentPoint, midpoint.clientX, midpoint.clientY, nextZoom)
         useEditorStore.getState().setCamera(result.zoom, result.panX, result.panY)
         return
       }
@@ -342,7 +346,7 @@ export function CanvasArtworkLayer() {
       if (!interaction) return
 
       if (interaction.kind === 'drag-selection') {
-        const point = clientPointToDocumentPoint(event.clientX, event.clientY, svg, effectiveViewBox)
+        const point = clientPointToDocumentPoint(event.clientX, event.clientY, svg, effectiveViewBoxRef.current)
         const dx = point.x - interaction.originX
         const dy = point.y - interaction.originY
         // Use a pixel-space threshold so a gentle tap doesn't register as a drag
@@ -356,8 +360,8 @@ export function CanvasArtworkLayer() {
 
       if (interaction.kind === 'pan-canvas') {
         const rect = svg.getBoundingClientRect()
-        const unitsPerPixelX = effectiveViewBox.width / rect.width
-        const unitsPerPixelY = effectiveViewBox.height / rect.height
+        const unitsPerPixelX = effectiveViewBoxRef.current.width / rect.width
+        const unitsPerPixelY = effectiveViewBoxRef.current.height / rect.height
         const dx = (event.clientX - interaction.originX) * unitsPerPixelX
         const dy = (event.clientY - interaction.originY) * unitsPerPixelY
         if (Math.abs(dx) > 0.1 || Math.abs(dy) > 0.1) interaction.moved = true
@@ -366,7 +370,7 @@ export function CanvasArtworkLayer() {
       }
 
       if (interaction.kind === 'marquee-select') {
-        const point = clientPointToDocumentPoint(event.clientX, event.clientY, svg, effectiveViewBox)
+        const point = clientPointToDocumentPoint(event.clientX, event.clientY, svg, effectiveViewBoxRef.current)
         const rect = normalizeBounds({
           x: interaction.origin.x,
           y: interaction.origin.y,
@@ -418,7 +422,7 @@ export function CanvasArtworkLayer() {
       window.removeEventListener('pointerup', handlePointerUp)
       window.removeEventListener('pointercancel', handlePointerUp)
     }
-  }, [document, effectiveViewBox, finishInteraction, maybeBeginPinch, replaceDocument, setPan, setMarqueeRect, setSelection, clearSelection])
+  }, [finishInteraction, maybeBeginPinch, replaceDocument, setPan, setMarqueeRect, setSelection, clearSelection])
 
   const handleNodePointerDown = (event: ReactPointerEvent<SVGElement>, id: string) => {
     const svg = svgRef.current

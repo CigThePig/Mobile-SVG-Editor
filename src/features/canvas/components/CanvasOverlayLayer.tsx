@@ -160,6 +160,10 @@ export function CanvasOverlayLayer() {
   const transformRef = useRef<TransformInteraction>(null)
   const svgRef = useRef<SVGSVGElement | null>(null)
   const effectiveViewBox = useMemo(() => getEffectiveViewBox(document, view), [document, view])
+  const effectiveViewBoxRef = useRef(effectiveViewBox)
+  effectiveViewBoxRef.current = effectiveViewBox
+  const lockAspectRatioRef = useRef(lockAspectRatio)
+  lockAspectRatioRef.current = lockAspectRatio
 
   const selectedNodes = selectedNodeIds.map((id) => getNodeById(document.root, id)).filter((node): node is NonNullable<typeof node> => Boolean(node))
   const selectionBounds = getBoundsForNodes(selectedNodes)
@@ -199,10 +203,10 @@ export function CanvasOverlayLayer() {
       const svg = svgRef.current
       if (!interaction || !svg) return
 
-      const point = clientPointToDocumentPoint(event.clientX, event.clientY, svg, effectiveViewBox)
+      const point = clientPointToDocumentPoint(event.clientX, event.clientY, svg, effectiveViewBoxRef.current)
 
       if (interaction.kind === 'resize') {
-        const nextBounds = buildBoundsFromHandle(interaction.startBounds, interaction.handle, point, lockAspectRatio || event.shiftKey)
+        const nextBounds = buildBoundsFromHandle(interaction.startBounds, interaction.handle, point, lockAspectRatioRef.current || event.shiftKey)
         transformRef.current = { ...interaction, moved: true }
         const nextDocument = interaction.nodeIds.length === 1
           ? resizeNodeInDocument(interaction.startDocument, interaction.nodeIds[0], nextBounds)
@@ -235,12 +239,13 @@ export function CanvasOverlayLayer() {
       window.removeEventListener('pointerup', handlePointerUp)
       window.removeEventListener('pointercancel', handlePointerUp)
     }
-  }, [effectiveViewBox, finishTransform, lockAspectRatio, replaceDocument])
+  }, [finishTransform, replaceDocument])
 
   const startResize = (event: ReactPointerEvent<SVGCircleElement>, handle: ResizeHandlePosition) => {
     if (!selectionBounds || mode !== 'select') return
     if (selectedNodes.some((n) => n.locked)) return
     event.stopPropagation()
+    event.currentTarget.setPointerCapture(event.pointerId)
     transformRef.current = {
       kind: 'resize',
       nodeIds: selectedNodeIds,
@@ -255,6 +260,7 @@ export function CanvasOverlayLayer() {
     if (!selectionBounds || mode !== 'select' || !svgRef.current) return
     if (selectedNodes.some((n) => n.locked)) return
     event.stopPropagation()
+    event.currentTarget.setPointerCapture(event.pointerId)
     const center = { x: selectionBounds.x + selectionBounds.width / 2, y: selectionBounds.y + selectionBounds.height / 2 }
     const point = clientPointToDocumentPoint(event.clientX, event.clientY, svgRef.current, effectiveViewBox)
     transformRef.current = {
@@ -377,7 +383,7 @@ export function CanvasOverlayLayer() {
                 cy={rotationHandle.y}
                 r={handleRadius * 1.5}
                 fill="transparent"
-                style={{ pointerEvents: 'all', cursor: 'grab' }}
+                style={{ pointerEvents: 'all', cursor: 'grab', touchAction: 'none' }}
                 onPointerDown={startRotate}
               />
               {/* Visible handle */}
@@ -414,7 +420,7 @@ export function CanvasOverlayLayer() {
                   cy={item.y}
                   r={r * 2}
                   fill="transparent"
-                  style={{ pointerEvents: 'all', cursor: getHandleCursor(item.handle) }}
+                  style={{ pointerEvents: 'all', cursor: getHandleCursor(item.handle), touchAction: 'none' }}
                   onPointerDown={(event) => startResize(event, item.handle)}
                 />
                 {/* Visible handle */}

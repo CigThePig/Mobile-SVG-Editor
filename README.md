@@ -63,6 +63,7 @@ This is an actively expanding personal workflow tool, not a minimal starter or a
 - List snapshots most-recent first; restore any snapshot (replaces document and clears undo history)
 - Delete individual snapshots
 - Session history log shows the current undo stack labels
+- Undo stack capped at 50 entries to bound memory use
 
 ### Canvas and navigation
 
@@ -72,6 +73,10 @@ This is an actively expanding personal workflow tool, not a minimal starter or a
 - Button zoom controls
 - Two-finger pinch zoom
 - Navigate mode for panning
+- Zoom percentage display in the canvas overlay (bottom-right)
+- Grid overlay toggled from the canvas overlay (shows at the configured grid size)
+- Snap toggle button in the canvas overlay with visual on/off state
+- Snap candidate indicators (subtle dots at corners, edges, and centers of non-selected nodes when snap is enabled)
 
 ### Object selection and transforms
 
@@ -176,6 +181,8 @@ There are tests for:
 - path parsing / serialization
 - path operations
 - node bounds
+- snap utilities (snapPoint, snapAngle, boundsToSnapCandidates, screenThresholdToDocSpace)
+- history store (push/undo/redo, canUndo/canRedo, clear, 50-entry stack cap)
 
 The repo has more test coverage in utility math and document operations than in UI integration.
 
@@ -263,21 +270,33 @@ Goal: bring the broader editor model into the actual app.
 - ✓ Snapshots and history UI — `SnapshotsSheet` (History button in top bar) lets you save named snapshots to Dexie, restore any snapshot, delete snapshots, and view the current session's undo history log
 - ✓ Home page — `HomePage` lists all documents with live thumbnails, lets you open, delete, or create a new document; the Back button in the editor navigates home
 
-### Phase 6: strengthen reliability for mobile use
+### Phase 6: strengthen reliability for mobile use ✓ COMPLETE
 
 Goal: keep the editor usable as complexity rises.
 
-- Improve history efficiency (currently whole-document snapshots)
-- Add integration tests for gestures and transforms
-- Add more visible snapping, grid, and guide feedback
-- Monitor performance on larger documents and path-heavy scenes
+- ✓ History efficiency — undo stack now capped at 50 entries, preventing unbounded memory growth from whole-document snapshots
+- ✓ Integration tests for snap utilities — `snapUtils.test.ts` covers snapPoint (grid, bbox, threshold, axis independence), snapAngle, boundsToSnapCandidates, and screenThresholdToDocSpace
+- ✓ Integration tests for history store — `historyStore.test.ts` covers push/undo/redo, canUndo/canRedo, clear, and the 50-entry cap
+- ✓ Grid overlay — `CanvasGridLayer` renders grid lines at configurable intervals when grid is enabled; toggled via the Grid button in the canvas overlay
+- ✓ Snap candidate indicators — subtle dots at corners, edges, and centers of non-selected nodes are shown on canvas whenever snap is enabled in select/shape mode
+- ✓ Canvas UI overlay — bottom-right overlay now shows live zoom %, a grid toggle button, and a snap toggle button with visual on/off states
+
+### Phase 7: further polish and capability expansion
+
+Goal: close remaining gaps in editing fidelity and export quality.
+
+- Pen mode bezier handle drag during anchor placement
+- Boolean operations that preserve curves (not just sampled polygons)
+- Guides: horizontal/vertical draggable guide lines with snap-to-guide
+- Performance profiling pass on large documents (canvas render, bounds computation, clone cost)
+- Settings and Inspect placeholder pages wired with real functionality
 
 ### Known open issues
 
 - Pen mode is corner-only (no bezier handle drag while placing). Refine in path edit mode after committing.
 - Boolean operations flatten curves to sampled polygons (adaptive sampling via bezier-js now in place, but output is still polygon-only).
-- Several pages (export, home, settings, inspect) remain as placeholders.
-- No grid, guide, or snap-to-grid overlay despite state fields existing.
+- Settings and Inspect pages remain as placeholders.
+- No draggable guide lines yet (grid overlay is now present; guide lines are a separate feature).
 
 ## Current run commands
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { groupSelectionCommand, ungroupSelectionCommand } from './documentCommands'
+import { groupSelectionCommand, ungroupSelectionCommand, duplicateNodesCommand, moveNodeOutOfGroupCommand, moveNodesIntoGroupCommand } from './documentCommands'
 import type { SvgDocument } from '@/model/document/documentTypes'
 import type { GroupNode, RectNode, RootNode, SvgNode } from '@/model/nodes/nodeTypes'
 import { getNodeBounds } from '@/features/selection/utils/nodeBounds'
@@ -156,5 +156,95 @@ describe('ungroupSelectionCommand', () => {
     const { document: result } = runCommand(ungroupSelectionCommand, doc, { nodeIds: ['r1'] })
     // Should return unchanged (no groups to expand)
     expect(rootChildren(result)).toHaveLength(1)
+  })
+})
+
+describe('duplicateNodesCommand — recursive', () => {
+  it('duplicates a node inside a group, placing clone inside the same group', () => {
+    const inner = makeRect('inner', 10, 10)
+    const group: GroupNode = { id: 'g1', type: 'group', visible: true, locked: false, name: 'G', children: [inner] }
+    const doc = makeDoc([group])
+
+    const { document: result, selectionIds } = runCommand(duplicateNodesCommand, doc, { nodeIds: ['inner'] })
+
+    // Root still has only the group
+    expect(rootChildren(result)).toHaveLength(1)
+    const resultGroup = rootChildren(result)[0] as GroupNode
+    // Group now has original + clone
+    expect(resultGroup.children).toHaveLength(2)
+    expect(resultGroup.children[0].id).toBe('inner')
+    // Clone is a different id
+    expect(selectionIds).toHaveLength(1)
+    expect(selectionIds![0]).not.toBe('inner')
+  })
+
+  it('duplicates a root-level node as before', () => {
+    const doc = makeDoc([makeRect('r1', 0, 0), makeRect('r2', 200, 0)])
+    const { document: result, selectionIds } = runCommand(duplicateNodesCommand, doc, { nodeIds: ['r1'] })
+    expect(rootChildren(result)).toHaveLength(3)
+    expect(selectionIds).toHaveLength(1)
+  })
+})
+
+describe('moveNodeOutOfGroupCommand', () => {
+  it('moves a node from a group to the parent of the group', () => {
+    const inner = makeRect('inner', 10, 10)
+    const group: GroupNode = { id: 'g1', type: 'group', visible: true, locked: false, name: 'G', children: [inner] }
+    const doc = makeDoc([group])
+
+    const { document: result, selectionIds } = runCommand(moveNodeOutOfGroupCommand, doc, { nodeId: 'inner' })
+
+    // Root now has the group AND the extracted node
+    expect(rootChildren(result)).toHaveLength(2)
+    const ids = rootChildren(result).map((c) => c.id)
+    expect(ids).toContain('g1')
+    expect(ids).toContain('inner')
+    // The node is placed after the group
+    expect(ids.indexOf('inner')).toBeGreaterThan(ids.indexOf('g1'))
+    // Group is now empty
+    const g = rootChildren(result).find((c) => c.id === 'g1') as GroupNode
+    expect(g.children).toHaveLength(0)
+    expect(selectionIds).toContain('inner')
+  })
+
+  it('does nothing when node is already at root level', () => {
+    const doc = makeDoc([makeRect('r1', 0, 0)])
+    const { document: result } = runCommand(moveNodeOutOfGroupCommand, doc, { nodeId: 'r1' })
+    expect(rootChildren(result)).toHaveLength(1)
+  })
+})
+
+describe('moveNodesIntoGroupCommand', () => {
+  it('moves selected nodes into a target group', () => {
+    const group: GroupNode = { id: 'g1', type: 'group', visible: true, locked: false, name: 'G', children: [] }
+    const r1 = makeRect('r1', 0, 0)
+    const r2 = makeRect('r2', 100, 0)
+    const doc = makeDoc([group, r1, r2])
+
+    const { document: result, selectionIds } = runCommand(moveNodesIntoGroupCommand, doc, { nodeIds: ['r1', 'r2'], targetGroupId: 'g1' })
+
+    // Root only has the group now
+    expect(rootChildren(result)).toHaveLength(1)
+    const g = rootChildren(result)[0] as GroupNode
+    expect(g.children).toHaveLength(2)
+    const childIds = g.children.map((c) => c.id)
+    expect(childIds).toContain('r1')
+    expect(childIds).toContain('r2')
+    expect(selectionIds).toContain('r1')
+    expect(selectionIds).toContain('r2')
+  })
+
+  it('skips the target group itself if included in nodeIds', () => {
+    const group: GroupNode = { id: 'g1', type: 'group', visible: true, locked: false, name: 'G', children: [] }
+    const r1 = makeRect('r1', 0, 0)
+    const doc = makeDoc([group, r1])
+
+    const { document: result } = runCommand(moveNodesIntoGroupCommand, doc, { nodeIds: ['g1', 'r1'], targetGroupId: 'g1' })
+
+    // r1 moved into group; group is NOT moved into itself
+    const g = rootChildren(result).find((c) => c.id === 'g1') as GroupNode
+    expect(rootChildren(result)).toHaveLength(1)
+    expect(g.children).toHaveLength(1)
+    expect(g.children[0].id).toBe('r1')
   })
 })

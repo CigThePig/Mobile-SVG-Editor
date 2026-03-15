@@ -16,7 +16,9 @@ import {
   updateNodeFillCommand,
   updateNodeStrokeCommand,
   groupSelectionCommand,
-  ungroupSelectionCommand
+  ungroupSelectionCommand,
+  moveNodeOutOfGroupCommand,
+  moveNodesIntoGroupCommand
 } from './documentCommands'
 import {
   convertToPathCommand,
@@ -55,6 +57,8 @@ export function bootstrapCommands() {
   registerCommand(updateNodeStrokeCommand)
   registerCommand(groupSelectionCommand)
   registerCommand(ungroupSelectionCommand)
+  registerCommand(moveNodeOutOfGroupCommand)
+  registerCommand(moveNodesIntoGroupCommand)
   // Path / geometry editing commands
   registerCommand(convertToPathCommand)
   registerCommand(movePointCommand)

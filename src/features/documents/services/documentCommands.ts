@@ -7,6 +7,16 @@ function isContainerNode(node: SvgNode): node is RootNode | GroupNode {
   return node.type === 'root' || node.type === 'group'
 }
 
+function getNodeInTree(node: SvgNode, targetId: string): SvgNode | null {
+  if (node.id === targetId) return node
+  if (!node.children?.length) return null
+  for (const child of node.children) {
+    const found = getNodeInTree(child, targetId)
+    if (found) return found
+  }
+  return null
+}
+
 function getParentInfo(node: SvgNode, childId: string): { parent: RootNode | GroupNode; index: number } | null {
   if (!isContainerNode(node)) return null
 
@@ -477,21 +487,29 @@ export const duplicateNodesCommand: EditorCommand<{ nodeIds: string[] }> = {
   label: 'Duplicate',
   run: ({ document }, { nodeIds }) => {
     const newIds: string[] = []
-    let root = { ...document.root, children: [...(document.root.children ?? [])] }
+    let root: SvgNode = document.root
 
     for (const nodeId of nodeIds) {
-      const index = root.children.findIndex((c) => c.id === nodeId)
+      const parentInfo = getParentInfo(root, nodeId)
+      if (!parentInfo) continue
+      const { parent } = parentInfo
+      const index = parent.children.findIndex((c) => c.id === nodeId)
       if (index < 0) continue
-      const original = root.children[index]
+      const original = parent.children[index]
       const clone = deepCloneWithNewIds(offsetNode(original, 16, 16))
       newIds.push(clone.id)
-      root = { ...root, children: [...root.children.slice(0, index + 1), clone, ...root.children.slice(index + 1)] }
+      const newParentChildren = [
+        ...parent.children.slice(0, index + 1),
+        clone,
+        ...parent.children.slice(index + 1)
+      ]
+      root = replaceChildrenInTree(root, parent.id, newParentChildren)
     }
 
     return {
       label: `Duplicate ${nodeIds.length === 1 ? 'Object' : 'Objects'}`,
       selectionIds: newIds,
-      document: { ...document, updatedAt: new Date().toISOString(), root }
+      document: { ...document, updatedAt: new Date().toISOString(), root: root as RootNode }
     }
   }
 }
@@ -637,6 +655,67 @@ export const ungroupSelectionCommand: EditorCommand<{ nodeIds: string[] }> = {
       label: 'Ungroup Selection',
       document: result.document,
       selectionIds: result.selectionIds
+    }
+  }
+}
+
+export const moveNodeOutOfGroupCommand: EditorCommand<{ nodeId: string }> = {
+  id: 'document.moveNodeOutOfGroup',
+  label: 'Move Out of Group',
+  run: ({ document }, { nodeId }) => {
+    const parentInfo = getParentInfo(document.root, nodeId)
+    if (!parentInfo || parentInfo.parent.type === 'root') {
+      return { label: 'Move Out of Group', selectionIds: [nodeId], document }
+    }
+    const node = parentInfo.parent.children.find((c) => c.id === nodeId)!
+    const newParentChildren = parentInfo.parent.children.filter((c) => c.id !== nodeId)
+    const tempRoot = replaceChildrenInTree(document.root, parentInfo.parent.id, newParentChildren) as RootNode
+    const grandParentInfo = getParentInfo(tempRoot, parentInfo.parent.id)
+    if (!grandParentInfo) return { label: 'Move Out of Group', selectionIds: [nodeId], document }
+    const groupIndex = grandParentInfo.parent.children.findIndex((c) => c.id === parentInfo.parent.id)
+    const newGrandChildren = [
+      ...grandParentInfo.parent.children.slice(0, groupIndex + 1),
+      node,
+      ...grandParentInfo.parent.children.slice(groupIndex + 1)
+    ]
+    const nextRoot = replaceChildrenInTree(tempRoot, grandParentInfo.parent.id, newGrandChildren) as RootNode
+    return {
+      label: 'Move Out of Group',
+      selectionIds: [nodeId],
+      document: { ...document, updatedAt: new Date().toISOString(), root: nextRoot }
+    }
+  }
+}
+
+export const moveNodesIntoGroupCommand: EditorCommand<{ nodeIds: string[]; targetGroupId: string }> = {
+  id: 'document.moveNodesIntoGroup',
+  label: 'Move Into Group',
+  run: ({ document }, { nodeIds, targetGroupId }) => {
+    let nextRoot: SvgNode = document.root
+    const collected: SvgNode[] = []
+
+    for (const nodeId of nodeIds) {
+      if (nodeId === targetGroupId) continue
+      const parentInfo = getParentInfo(nextRoot, nodeId)
+      if (!parentInfo) continue
+      const node = parentInfo.parent.children.find((c) => c.id === nodeId)
+      if (!node) continue
+      collected.push(node)
+      const newParentChildren = parentInfo.parent.children.filter((c) => c.id !== nodeId)
+      nextRoot = replaceChildrenInTree(nextRoot, parentInfo.parent.id, newParentChildren)
+    }
+
+    if (!collected.length) return { label: 'Move Into Group', selectionIds: nodeIds, document }
+    const targetNode = getNodeInTree(nextRoot, targetGroupId)
+    if (!targetNode || targetNode.type !== 'group') {
+      return { label: 'Move Into Group', selectionIds: nodeIds, document }
+    }
+    const newTargetChildren = [...(targetNode.children ?? []), ...collected]
+    nextRoot = replaceChildrenInTree(nextRoot, targetGroupId, newTargetChildren)
+    return {
+      label: 'Move Into Group',
+      selectionIds: collected.map((n) => n.id),
+      document: { ...document, updatedAt: new Date().toISOString(), root: nextRoot as RootNode }
     }
   }
 }

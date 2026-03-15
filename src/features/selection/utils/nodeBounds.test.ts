@@ -200,6 +200,39 @@ describe('getNodeBounds – rotation transform', () => {
   })
 })
 
+describe('getNodeBounds – exact arc bounds', () => {
+  it('returns tight bounds for a full-circle arc path', () => {
+    // Circle of radius 50 centred at (50,50): two semicircular arcs.
+    // Endpoints: top (50,0) and bottom (50,100). Should give bounds x=0,y=0,w=100,h=100.
+    const p: PathNode = {
+      id: 'p1', type: 'path', visible: true, locked: false,
+      d: 'M 50 0 A 50 50 0 0 1 50 100 A 50 50 0 0 1 50 0 Z'
+    }
+    const b = getNodeBounds(p)
+    expect(b).not.toBeNull()
+    // Bounds should encompass the full circle
+    expect(b!.x).toBeLessThanOrEqual(1)
+    expect(b!.y).toBeLessThanOrEqual(1)
+    expect(b!.x + b!.width).toBeGreaterThanOrEqual(99)
+    expect(b!.y + b!.height).toBeGreaterThanOrEqual(99)
+  })
+
+  it('semicircle arc bounds include the apex not just the endpoints', () => {
+    // Semicircle: M 0 50 A 50 50 0 0 1 100 50
+    // Endpoints are both at y=50; the arc apex is at y=0 (top of circle centred at 50,50)
+    const p: PathNode = {
+      id: 'p2', type: 'path', visible: true, locked: false,
+      d: 'M 0 50 A 50 50 0 0 1 100 50'
+    }
+    const b = getNodeBounds(p)
+    expect(b).not.toBeNull()
+    // y minimum should be at or near 0 (apex of the arc), not just 50 (endpoints)
+    expect(b!.y).toBeLessThanOrEqual(5)
+    expect(b!.x).toBeLessThanOrEqual(1)
+    expect(b!.x + b!.width).toBeGreaterThanOrEqual(99)
+  })
+})
+
 describe('boundsIntersect', () => {
   it('returns true for overlapping rects', () => {
     expect(boundsIntersect({ x: 0, y: 0, width: 100, height: 100 }, { x: 50, y: 50, width: 100, height: 100 })).toBe(true)

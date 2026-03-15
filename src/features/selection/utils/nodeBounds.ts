@@ -1,3 +1,4 @@
+import { getPathBBox } from 'svg-path-commander'
 import type {
   CircleNode,
   EllipseNode,
@@ -163,6 +164,23 @@ function approxPathBounds(d: string): NodeBounds | null {
   return fromPoints(points)
 }
 
+/**
+ * Compute exact bounds for an SVG path using svg-path-commander's getPathBBox,
+ * which correctly handles arc extrema and bezier control-point extrema.
+ * Falls back to approxPathBounds on error.
+ */
+function exactPathBounds(d: string): NodeBounds | null {
+  try {
+    const bbox = getPathBBox(d)
+    if (!isFinite(bbox.x) || !isFinite(bbox.y) || !isFinite(bbox.width) || !isFinite(bbox.height)) {
+      return approxPathBounds(d)
+    }
+    return { x: bbox.x, y: bbox.y, width: bbox.width, height: bbox.height }
+  } catch {
+    return approxPathBounds(d)
+  }
+}
+
 function rotatePoint(point: { x: number; y: number }, center: { x: number; y: number }, degrees: number) {
   const radians = (degrees * Math.PI) / 180
   const cos = Math.cos(radians)
@@ -245,7 +263,7 @@ function getBaseNodeBounds(node: SvgNode): NodeBounds | null {
       return { x: n.cx - n.outerRadius, y: n.cy - n.outerRadius, width: n.outerRadius * 2, height: n.outerRadius * 2 }
     }
     case 'path':
-      return approxPathBounds((node as PathNode).d)
+      return exactPathBounds((node as PathNode).d)
     case 'text': {
       const n = node as TextNode
       const fontSize = n.textStyle?.fontSize ?? 16

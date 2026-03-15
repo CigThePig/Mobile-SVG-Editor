@@ -244,31 +244,44 @@ function moveNode(node: SvgNode, dx: number, dy: number): SvgNode {
   }
 }
 
+/**
+ * When a node has a rotation transform, keep the pivot in sync with the node's
+ * new local-space centre after resize. Without this, the next rotation after a
+ * resize will pivot around the old (stale) centre, causing a visible jump.
+ */
+function syncRotationPivot(node: SvgNode, newLocalCenterX: number, newLocalCenterY: number): SvgNode {
+  if (!node.transform?.rotate) return node
+  return {
+    ...node,
+    transform: {
+      ...node.transform,
+      pivotX: newLocalCenterX,
+      pivotY: newLocalCenterY
+    }
+  }
+}
+
 function resizeNode(node: SvgNode, oldBounds: NodeBounds, targetBounds: NodeBounds): SvgNode {
   const newBounds = normalizeBounds(targetBounds)
 
   switch (node.type) {
     case 'rect': {
       const n = node as RectNode
-      return { ...n, x: newBounds.x, y: newBounds.y, width: newBounds.width, height: newBounds.height }
+      const resized = { ...n, x: newBounds.x, y: newBounds.y, width: newBounds.width, height: newBounds.height }
+      return syncRotationPivot(resized, newBounds.x + newBounds.width / 2, newBounds.y + newBounds.height / 2)
     }
     case 'circle': {
       const size = Math.min(newBounds.width, newBounds.height)
-      return {
-        ...(node as CircleNode),
-        cx: newBounds.x + newBounds.width / 2,
-        cy: newBounds.y + newBounds.height / 2,
-        r: size / 2
-      }
+      const cx = newBounds.x + newBounds.width / 2
+      const cy = newBounds.y + newBounds.height / 2
+      const resized = { ...(node as CircleNode), cx, cy, r: size / 2 }
+      return syncRotationPivot(resized, cx, cy)
     }
     case 'ellipse': {
-      return {
-        ...(node as EllipseNode),
-        cx: newBounds.x + newBounds.width / 2,
-        cy: newBounds.y + newBounds.height / 2,
-        rx: newBounds.width / 2,
-        ry: newBounds.height / 2
-      }
+      const cx = newBounds.x + newBounds.width / 2
+      const cy = newBounds.y + newBounds.height / 2
+      const resized = { ...(node as EllipseNode), cx, cy, rx: newBounds.width / 2, ry: newBounds.height / 2 }
+      return syncRotationPivot(resized, cx, cy)
     }
     case 'line': {
       const n = node as LineNode
@@ -293,17 +306,15 @@ function resizeNode(node: SvgNode, oldBounds: NodeBounds, targetBounds: NodeBoun
       const scaleW = newBounds.width / Math.max(1, oldBounds.width)
       const scaleH = newBounds.height / Math.max(1, oldBounds.height)
       const avgScale = (scaleW + scaleH) / 2
-      return {
-        ...n,
-        cx: newBounds.x + newBounds.width / 2,
-        cy: newBounds.y + newBounds.height / 2,
-        outerRadius: n.outerRadius * avgScale,
-        innerRadius: n.innerRadius * avgScale
-      }
+      const cx = newBounds.x + newBounds.width / 2
+      const cy = newBounds.y + newBounds.height / 2
+      const resized = { ...n, cx, cy, outerRadius: n.outerRadius * avgScale, innerRadius: n.innerRadius * avgScale }
+      return syncRotationPivot(resized, cx, cy)
     }
     case 'path': {
       const n = node as PathNode
-      return { ...n, d: scalePathData(n.d, oldBounds, newBounds) }
+      const resized = { ...n, d: scalePathData(n.d, oldBounds, newBounds) }
+      return syncRotationPivot(resized, newBounds.x + newBounds.width / 2, newBounds.y + newBounds.height / 2)
     }
     case 'text': {
       const n = node as TextNode
@@ -321,13 +332,8 @@ function resizeNode(node: SvgNode, oldBounds: NodeBounds, targetBounds: NodeBoun
     }
     case 'image': {
       const n = node as ImageNode
-      return {
-        ...n,
-        x: newBounds.x,
-        y: newBounds.y,
-        width: newBounds.width,
-        height: newBounds.height
-      }
+      const resized = { ...n, x: newBounds.x, y: newBounds.y, width: newBounds.width, height: newBounds.height }
+      return syncRotationPivot(resized, newBounds.x + newBounds.width / 2, newBounds.y + newBounds.height / 2)
     }
     case 'group': {
       const n = node as GroupNode

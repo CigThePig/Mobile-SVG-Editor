@@ -2,6 +2,7 @@ import { nanoid } from 'nanoid'
 import type { SvgDocument } from '@/model/document/documentTypes'
 import type { AppearanceModel, CircleNode, EllipseNode, GroupNode, ImageNode, LineNode, PathNode, PolygonNode, PolylineNode, RootNode, StarNode, StrokeModel, SvgNode, RectNode, TextNode } from '@/model/nodes/nodeTypes'
 import type { EditorCommand } from './commands'
+import { getNodeBounds, getLocalNodeBounds } from '@/features/selection/utils/nodeBounds'
 
 function isContainerNode(node: SvgNode): node is RootNode | GroupNode {
   return node.type === 'root' || node.type === 'group'
@@ -99,6 +100,46 @@ function applyTranslateToChildCoords(child: SvgNode, dx: number, dy: number): Sv
   }
 }
 
+/**
+ * Apply a group's transform to a single point (scale → rotate → translate).
+ * Mirrors the transform order used in transformBounds() in nodeBounds.ts.
+ */
+function applyGroupTransformToPoint(
+  point: { x: number; y: number },
+  groupTransform: NonNullable<GroupNode['transform']>
+): { x: number; y: number } {
+  const tx = groupTransform.translateX ?? 0
+  const ty = groupTransform.translateY ?? 0
+  const sx = groupTransform.scaleX ?? 1
+  const sy = groupTransform.scaleY ?? 1
+  const rotate = groupTransform.rotate ?? 0
+  const px = groupTransform.pivotX ?? 0
+  const py = groupTransform.pivotY ?? 0
+
+  let { x, y } = point
+
+  // Scale around pivot
+  x = px + (x - px) * sx
+  y = py + (y - py) * sy
+
+  // Rotate around pivot
+  if (rotate) {
+    const angle = (rotate * Math.PI) / 180
+    const cos = Math.cos(angle)
+    const sin = Math.sin(angle)
+    const dx = x - px
+    const dy = y - py
+    x = px + dx * cos - dy * sin
+    y = py + dx * sin + dy * cos
+  }
+
+  // Translate
+  x += tx
+  y += ty
+
+  return { x, y }
+}
+
 function foldTransformIntoChild(child: SvgNode, groupTransform?: GroupNode['transform']): SvgNode {
   if (!groupTransform) return child
 
@@ -120,24 +161,40 @@ function foldTransformIntoChild(child: SvgNode, groupTransform?: GroupNode['tran
     return applyTranslateToChildCoords(child, tx, ty)
   }
 
-  // General case: combine all transform components.
-  // Note: this is an approximation — translate+rotate compositions are only exact
-  // when both pivots coincide. Known limitation for complex nested transforms.
-  // Critically, we do NOT inherit the group's pivotX/Y onto the child: the group
-  // pivot is in group-local space while child.pivotX/Y must be in child-local space.
+  // General case: compute where the child's world-space center ends up after the
+  // group transform, and adjust translateX/Y by the delta. This correctly handles
+  // rotation (which moves the child's center relative to the group pivot) rather
+  // than naively adding the group's translation to the child's translation.
+  const childWorldBounds = getNodeBounds(child)
+  const oldCenter = childWorldBounds
+    ? { x: childWorldBounds.x + childWorldBounds.width / 2, y: childWorldBounds.y + childWorldBounds.height / 2 }
+    : { x: child.transform?.translateX ?? 0, y: child.transform?.translateY ?? 0 }
+
+  const newCenter = applyGroupTransformToPoint(oldCenter, groupTransform)
+  const deltaX = newCenter.x - oldCenter.x
+  const deltaY = newCenter.y - oldCenter.y
+
+  // Use the child's local (pre-transform) center as the new pivot so that
+  // rotation continues to happen around the child's own centre, not some
+  // inherited group-space point.
+  const localBounds = getLocalNodeBounds(child)
+  const localCenter = localBounds
+    ? { x: localBounds.x + localBounds.width / 2, y: localBounds.y + localBounds.height / 2 }
+    : { x: 0, y: 0 }
+
   return {
     ...child,
     transform: {
       ...child.transform,
-      translateX: (child.transform?.translateX ?? 0) + tx,
-      translateY: (child.transform?.translateY ?? 0) + ty,
+      translateX: (child.transform?.translateX ?? 0) + deltaX,
+      translateY: (child.transform?.translateY ?? 0) + deltaY,
       rotate: (child.transform?.rotate ?? 0) + rotate,
       scaleX: (child.transform?.scaleX ?? 1) * scaleX,
       scaleY: (child.transform?.scaleY ?? 1) * scaleY,
       skewX: (child.transform?.skewX ?? 0) + skewX,
-      skewY: (child.transform?.skewY ?? 0) + skewY
-      // pivotX/pivotY: intentionally NOT inherited from group — they are in
-      // different coordinate spaces. Child keeps its own pivot (or none).
+      skewY: (child.transform?.skewY ?? 0) + skewY,
+      pivotX: localCenter.x,
+      pivotY: localCenter.y
     }
   }
 }

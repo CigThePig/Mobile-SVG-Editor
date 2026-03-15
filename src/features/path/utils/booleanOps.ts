@@ -11,6 +11,7 @@
  */
 
 import polygonClipping from 'polygon-clipping'
+import { Bezier } from 'bezier-js'
 import { nanoid } from 'nanoid'
 import type { PathNode, SvgNode, AppearanceModel } from '@/model/nodes/nodeTypes'
 import { parsePathD, serializePathD } from './pathGeometry'
@@ -51,10 +52,10 @@ function pathDToPolygon(d: string): Polygon {
       const p2 = [to.h1x, to.h1y]
       const p3 = [to.x, to.y]
 
-      // Sample bezier curve at N steps
+      // Sample bezier curve at N steps (adaptive: proportional to arc length)
       const isLine = Math.abs(p1[0] - p0[0]) < 1e-4 && Math.abs(p1[1] - p0[1]) < 1e-4 &&
                      Math.abs(p2[0] - p3[0]) < 1e-4 && Math.abs(p2[1] - p3[1]) < 1e-4
-      const steps = isLine ? 1 : 20
+      const steps = isLine ? 1 : adaptiveSteps(p0, p1, p2, p3)
 
       for (let t = 0; t < steps; t++) {
         const u = t / steps
@@ -77,6 +78,27 @@ function pathDToPolygon(d: string): Polygon {
   }
 
   return rings
+}
+
+/**
+ * Compute the number of sampling steps for a cubic bezier segment based on
+ * its arc length (via bezier-js). More steps for longer/curvier segments,
+ * fewer for nearly-straight lines — instead of the previous fixed 20.
+ * Range: 8–64 steps, approximately 1 sample per 4 SVG user units.
+ */
+function adaptiveSteps(p0: number[], p1: number[], p2: number[], p3: number[]): number {
+  try {
+    const b = new Bezier(
+      { x: p0[0], y: p0[1] },
+      { x: p1[0], y: p1[1] },
+      { x: p2[0], y: p2[1] },
+      { x: p3[0], y: p3[1] }
+    )
+    const length = b.length()
+    return Math.max(8, Math.min(64, Math.ceil(length / 4)))
+  } catch {
+    return 20
+  }
 }
 
 function sampleCubic(p0: number[], p1: number[], p2: number[], p3: number[], t: number): number[] {

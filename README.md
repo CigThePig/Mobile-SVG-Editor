@@ -202,15 +202,14 @@ Goal: make grouping and nesting reliable.
 - ✓ Isolation mode visual indicator — non-isolated nodes dim to 20% opacity on canvas; "Exit Group" button appears in the context action strip while in isolation
 - ✓ Explicit move-in/out controls in layers panel — "⬅" button on each nested node pops it out of its parent group; "⬇" button on group rows moves selected nodes into that group
 
-### Phase 4: replace approximation-heavy geometry
+### Phase 4: replace approximation-heavy geometry ✓ COMPLETE
 
 Goal: reduce fragile hand-written transform and path math.
 
-- Improve transform composition (especially ungroup folding for rotated/scaled groups)
-- Improve path bounds (currently approximate for relative commands and arcs)
-- Improve rotated resize behavior
-- Improve boolean fidelity where feasible
-- Evaluate existing declared dependencies before writing more custom math
+- ✓ Improved transform composition — `foldTransformIntoChild` now computes the correct world-space delta when ungrouping rotated/scaled groups, instead of naively adding the group's translation to the child's translation
+- ✓ Exact path bounds — `approxPathBounds` arc handling replaced with `svg-path-commander`'s `getPathBBox()`, which correctly computes arc extrema and bezier extrema; `approxPathBounds` kept as fallback
+- ✓ Rotated resize pivot sync — `resizeNode` now updates `pivotX/Y` to the node's new local centre after resize, preventing rotation drift when the shape is later rotated again
+- ✓ Adaptive boolean sampling — bezier segments in `booleanOps` are now sampled proportionally to arc length via `bezier-js` (8–64 steps, ~1 per 4px), replacing the previous fixed 20-step approximation
 
 ### Phase 5: expose the dormant systems
 
@@ -235,9 +234,7 @@ Goal: keep the editor usable as complexity rises.
 ### Known open issues
 
 - Pen mode is corner-only (no bezier handle drag while placing). Refine in path edit mode after committing.
-- Transform math for ungroup is approximate for complex (rotate + scale) groups.
-- Path bounds calculation is approximate for relative commands and arcs.
-- Boolean operations flatten curves to sampled polygons.
+- Boolean operations flatten curves to sampled polygons (adaptive sampling via bezier-js now in place, but output is still polygon-only).
 - Several pages (export, home, settings, inspect) remain as placeholders.
 - No grid, guide, or snap-to-grid overlay despite state fields existing.
 

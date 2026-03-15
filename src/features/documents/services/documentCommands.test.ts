@@ -142,6 +142,50 @@ describe('ungroupSelectionCommand', () => {
     expect(ur1.transform?.translateY ?? 0).toBeCloseTo(0)
   })
 
+  it('preserves world position when ungrouping a group with rotation', () => {
+    // Create a group containing a rect, give the group a 90° rotation around
+    // the group's bounding-box centre. After ungrouping, the rect's world-space
+    // centre should equal where it was when still inside the group.
+    const r1 = makeRect('r1', 0, 0, 100, 100)
+    const doc = makeDoc([r1])
+
+    // Group the rect
+    const { document: grouped, selectionIds: groupedSels } = runCommand(groupSelectionCommand, doc, { nodeIds: ['r1'] })
+    // groupSelectionCommand requires 2+ nodes; fall back to a manual group
+    // with one child so we can attach a rotation transform to test the math.
+    const groupId = 'g-test'
+    const groupedDoc: SvgDocument = {
+      ...doc,
+      root: {
+        ...doc.root,
+        children: [{
+          id: groupId,
+          type: 'group',
+          visible: true,
+          locked: false,
+          children: [r1],
+          // Rotate 90° around the rect's centre (50, 50)
+          transform: { rotate: 90, pivotX: 50, pivotY: 50, translateX: 0, translateY: 0 }
+        }]
+      }
+    }
+
+    // Capture group's rendered world bounds centre before ungroup
+    const groupNode = (groupedDoc.root as RootNode).children[0]
+    const worldBoundsBefore = getNodeBounds(groupNode)!
+    const centerBefore = { x: worldBoundsBefore.x + worldBoundsBefore.width / 2, y: worldBoundsBefore.y + worldBoundsBefore.height / 2 }
+
+    // Ungroup
+    const { document: ungrouped } = runCommand(ungroupSelectionCommand, groupedDoc, { nodeIds: [groupId] })
+    const ungroupedRect = (ungrouped.root as RootNode).children[0]
+    const worldBoundsAfter = getNodeBounds(ungroupedRect)!
+    const centerAfter = { x: worldBoundsAfter.x + worldBoundsAfter.width / 2, y: worldBoundsAfter.y + worldBoundsAfter.height / 2 }
+
+    // World-space centre must be preserved (within rounding tolerance)
+    expect(centerAfter.x).toBeCloseTo(centerBefore.x, 1)
+    expect(centerAfter.y).toBeCloseTo(centerBefore.y, 1)
+  })
+
   it('selects ungrouped children after ungroup', () => {
     const doc = makeDoc([makeRect('r1', 0, 0), makeRect('r2', 100, 0)])
     const { document: grouped, selectionIds: groupedSels3 } = runCommand(groupSelectionCommand, doc, { nodeIds: ['r1', 'r2'] })

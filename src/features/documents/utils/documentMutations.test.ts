@@ -201,4 +201,23 @@ describe('resizeNodeInDocument', () => {
     const orig = rootChildren(doc)[0] as RectNode
     expect(orig.width).toBe(100)
   })
+
+  it('syncs pivot to new local centre after resizing a rotated rect', () => {
+    const rect: RectNode = {
+      id: 'r1',
+      type: 'rect',
+      visible: true,
+      locked: false,
+      x: 0, y: 0, width: 100, height: 100,
+      transform: { rotate: 45, pivotX: 50, pivotY: 50 }
+    }
+    const doc = makeDoc([rect])
+    const result = resizeNodeInDocument(doc, 'r1', { x: 0, y: 0, width: 200, height: 200 })
+    const resized = rootChildren(result)[0] as RectNode
+    // Pivot should be updated to the new local centre (100, 100)
+    expect(resized.transform?.pivotX).toBeCloseTo(100)
+    expect(resized.transform?.pivotY).toBeCloseTo(100)
+    // Rotation should be preserved
+    expect(resized.transform?.rotate).toBe(45)
+  })
 })

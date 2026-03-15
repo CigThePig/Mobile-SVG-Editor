@@ -3,11 +3,13 @@ import type { PointerEvent as ReactPointerEvent } from 'react'
 import { getEffectiveViewBox, clientPointToDocumentPoint } from '@/features/canvas/utils/viewBox'
 import { cloneDocument, getNodeById, resizeNodeInDocument, resizeNodesInDocument, rotateNodeInDocument, rotateNodesInDocument } from '@/features/documents/utils/documentMutations'
 import type { SvgDocument } from '@/model/document/documentTypes'
+import type { PathNode } from '@/model/nodes/nodeTypes'
 import { getNodeBounds, getBoundsForNodes, normalizeBounds, type NodeBounds } from '@/features/selection/utils/nodeBounds'
 import { saveDocument } from '@/db/dexie/queries'
 import { useEditorStore } from '@/stores/editorStore'
 import { useHistoryStore } from '@/stores/historyStore'
 import { PathEditOverlay } from '@/features/path/components/PathEditOverlay'
+import { parsePathD } from '@/features/path/utils/pathGeometry'
 
 type ResizeHandlePosition = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w'
 
@@ -156,6 +158,8 @@ export function CanvasOverlayLayer() {
   const view = useEditorStore((s) => s.view)
   const mode = useEditorStore((s) => s.mode)
   const lockAspectRatio = useEditorStore((s) => s.ui.lockAspectRatio)
+  const penPathInProgress = useEditorStore((s) => s.ui.penPathInProgress)
+  const penCursorPoint = useEditorStore((s) => s.ui.penCursorPoint)
   const replaceDocument = useEditorStore((s) => s.replaceDocument)
   const pushSnapshot = useHistoryStore((s) => s.pushSnapshot)
   const transformRef = useRef<TransformInteraction>(null)
@@ -361,6 +365,51 @@ export function CanvasOverlayLayer() {
           rx={4}
         />
       ) : null}
+
+      {/* Pen mode in-progress path preview */}
+      {mode === 'pen' && penPathInProgress && penCursorPoint && (() => {
+        const pathNode = getNodeById(document.root, penPathInProgress.nodeId)
+        if (!pathNode || pathNode.type !== 'path') return null
+        const parsed = parsePathD((pathNode as PathNode).d)
+        const subpath = parsed.subpaths[0]
+        if (!subpath) return null
+        const lastAnchor = subpath.anchors.at(-1)
+        const firstAnchor = subpath.anchors[0]
+        return (
+          <g style={{ pointerEvents: 'none' }}>
+            {/* Preview line from last anchor to cursor */}
+            {lastAnchor && (
+              <line
+                x1={lastAnchor.x} y1={lastAnchor.y}
+                x2={penCursorPoint.x} y2={penCursorPoint.y}
+                stroke="#60a5fa"
+                strokeWidth={1.5}
+                strokeDasharray="4 4"
+                vectorEffect="non-scaling-stroke"
+              />
+            )}
+            {/* Ghost "next anchor" circle at cursor */}
+            <circle
+              cx={penCursorPoint.x} cy={penCursorPoint.y}
+              r={5 / view.zoom}
+              fill="#60a5fa"
+              opacity={0.6}
+            />
+            {/* Close-path indicator on the first anchor (shown when ≥2 anchors placed) */}
+            {firstAnchor && subpath.anchors.length >= 2 && (
+              <circle
+                cx={firstAnchor.x} cy={firstAnchor.y}
+                r={10 / view.zoom}
+                fill="none"
+                stroke="#34d399"
+                strokeWidth={2 / view.zoom}
+                vectorEffect="non-scaling-stroke"
+                opacity={0.85}
+              />
+            )}
+          </g>
+        )
+      })()}
 
       {/* Path edit mode overlay */}
       {mode === 'path' && <PathEditOverlay svgRef={svgRef} />}

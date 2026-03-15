@@ -1,10 +1,13 @@
 import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
 import { createEmptyDocument } from '@/model/document/documentFactory'
+import { cloneDocument } from '@/features/documents/utils/documentMutations'
+import { saveDocument } from '@/db/dexie/queries'
 import type { SvgDocument } from '@/model/document/documentTypes'
 import type { SelectionState } from '@/model/selection/selectionTypes'
 import type { ViewState } from '@/model/view/viewTypes'
 import type { NodeBounds } from '@/features/selection/utils/nodeBounds'
+import { useHistoryStore } from '@/stores/historyStore'
 
 export type EditorMode =
   | 'navigate'
@@ -17,6 +20,8 @@ export type EditorMode =
   | 'structure'
   | 'inspect'
 
+export type ShapeDrawType = 'rect' | 'ellipse' | 'line' | 'polygon' | 'star'
+
 export interface EditorUiState {
   leftPanelOpen: boolean
   rightPanelOpen: boolean
@@ -24,6 +29,9 @@ export interface EditorUiState {
   multiSelectEnabled: boolean
   marqueeRect: NodeBounds | null
   inspectorSection: 'quick' | 'geometry' | 'appearance' | 'typography' | 'path' | 'arrange' | 'svg' | 'metadata'
+  shapeType: ShapeDrawType
+  penPathInProgress: { nodeId: string; startDocument: SvgDocument } | null
+  penCursorPoint: { x: number; y: number } | null
 }
 
 interface EditorStore {
@@ -54,6 +62,11 @@ interface EditorStore {
   replaceDocument: (doc: SvgDocument) => void
   toggleSnapEnabled: () => void
   setPathEditMode: (nodeId: string | null) => void
+  setShapeType: (type: ShapeDrawType) => void
+  setPenPathInProgress: (state: EditorUiState['penPathInProgress']) => void
+  setPenCursorPoint: (point: { x: number; y: number } | null) => void
+  commitPenPath: () => Promise<void>
+  discardPenPath: () => void
 }
 
 function uniqueIds(ids: string[]) {
@@ -61,7 +74,7 @@ function uniqueIds(ids: string[]) {
 }
 
 export const useEditorStore = create<EditorStore>()(
-  immer((set) => ({
+  immer((set, get) => ({
     activeDocument: createEmptyDocument(),
     mode: 'select',
     selection: {
@@ -91,10 +104,23 @@ export const useEditorStore = create<EditorStore>()(
       lockAspectRatio: false,
       multiSelectEnabled: false,
       marqueeRect: null,
-      inspectorSection: 'quick'
+      inspectorSection: 'quick',
+      shapeType: 'rect',
+      penPathInProgress: null,
+      penCursorPoint: null
     },
     setMode: (mode) =>
       set((state) => {
+        // Auto-discard an in-progress pen path when leaving pen mode
+        if (state.mode === 'pen' && mode !== 'pen' && state.ui.penPathInProgress) {
+          const penId = state.ui.penPathInProgress.nodeId
+          state.activeDocument.root.children = (state.activeDocument.root.children ?? []).filter(
+            (c) => c.id !== penId
+          )
+          state.ui.penPathInProgress = null
+          state.selection.selectedNodeIds = []
+          state.selection.activeNodeId = undefined
+        }
         state.mode = mode
       }),
     setZoom: (zoom) =>
@@ -209,6 +235,46 @@ export const useEditorStore = create<EditorStore>()(
           state.selection.selectionMode = 'object'
           state.selection.activePathPointIds = []
         }
+      }),
+    setShapeType: (type) =>
+      set((state) => {
+        state.ui.shapeType = type
+      }),
+    setPenPathInProgress: (penState) =>
+      set((state) => {
+        state.ui.penPathInProgress = penState
+      }),
+    setPenCursorPoint: (point) =>
+      set((state) => {
+        state.ui.penCursorPoint = point
+      }),
+    commitPenPath: async () => {
+      const { ui, activeDocument } = get()
+      const pen = ui.penPathInProgress
+      if (!pen) return
+      const afterDocument = cloneDocument(activeDocument)
+      useHistoryStore.getState().pushSnapshot('Draw Path', pen.startDocument, afterDocument)
+      await saveDocument(afterDocument)
+      set((state) => {
+        state.ui.penPathInProgress = null
+        state.mode = 'select'
+      })
+    },
+    discardPenPath: () =>
+      set((state) => {
+        const pen = state.ui.penPathInProgress
+        if (!pen) {
+          state.mode = 'select'
+          return
+        }
+        state.activeDocument.root.children = (state.activeDocument.root.children ?? []).filter(
+          (c) => c.id !== pen.nodeId
+        )
+        state.ui.penPathInProgress = null
+        state.ui.penCursorPoint = null
+        state.mode = 'select'
+        state.selection.selectedNodeIds = []
+        state.selection.activeNodeId = undefined
       })
   }))
 )

@@ -1,15 +1,16 @@
 import {
   Plus, Group, Ungroup, Layers, Lock, Unlock, Trash2, Copy,
   ChevronUp, ChevronDown, ChevronsUp, ChevronsDown, Eye, EyeOff,
-  Circle, Minus, Pentagon, Star, Type, Spline,
+  Circle, Minus, Pentagon, Star, Type, Spline, Square,
   AlignLeft, AlignCenter, AlignRight, AlignStartVertical, AlignCenterVertical, AlignEndVertical,
-  Magnet, Scissors, Combine, GitMerge
+  Magnet, Scissors, Combine, GitMerge, Paintbrush, Search
 } from 'lucide-react'
 import { getNodeById } from '@/features/documents/utils/documentMutations'
 import { runCommand } from '@/features/documents/services/commandRunner'
 import { getEffectiveViewBox } from '@/features/canvas/utils/viewBox'
-import { useEditorStore, type EditorMode } from '@/stores/editorStore'
+import { useEditorStore, type EditorMode, type ShapeDrawType } from '@/stores/editorStore'
 import { isConvertibleToPath } from '@/features/path/utils/pathConversion'
+import { parsePathD } from '@/features/path/utils/pathGeometry'
 
 const MODE_LABELS: Record<EditorMode, string> = {
   navigate: 'Pan',
@@ -23,6 +24,67 @@ const MODE_LABELS: Record<EditorMode, string> = {
   inspect: 'Inspect'
 }
 
+// ── Shared strip container + styling helpers ──────────────────────────────────
+
+function stripContainer(children: React.ReactNode) {
+  return (
+    <div
+      className="hide-scrollbar"
+      style={{
+        height: 50,
+        display: 'flex',
+        alignItems: 'center',
+        gap: 6,
+        padding: '0 10px',
+        borderTop: '1px solid rgba(255,255,255,0.08)',
+        background: '#161616',
+        overflowX: 'auto',
+        WebkitOverflowScrolling: 'touch',
+        flexShrink: 0
+      }}
+    >
+      {children}
+    </div>
+  )
+}
+
+function pill(active = false, disabled = false): React.CSSProperties {
+  return {
+    padding: '0 12px',
+    height: 34,
+    borderRadius: 10,
+    background: active ? 'rgba(96,165,250,0.22)' : 'rgba(255,255,255,0.08)',
+    border: active ? '1px solid rgba(96,165,250,0.4)' : '1px solid transparent',
+    color: active ? '#93c5fd' : disabled ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.9)',
+    whiteSpace: 'nowrap' as const,
+    display: 'flex',
+    alignItems: 'center',
+    gap: 5,
+    fontSize: 12,
+    fontWeight: 500,
+    flexShrink: 0,
+    cursor: disabled ? 'default' : 'pointer'
+  }
+}
+
+function iconPill(active = false, disabled = false): React.CSSProperties {
+  return { ...pill(active, disabled), padding: '0 10px' }
+}
+
+function divider(): React.ReactNode {
+  return <span style={{ width: 1, height: 18, background: 'rgba(255,255,255,0.12)', flexShrink: 0 }} />
+}
+
+function modeBadge(label: string, color = 'rgba(255,255,255,0.45)'): React.ReactNode {
+  return (
+    <span style={{ fontSize: 11, fontWeight: 600, color, letterSpacing: '0.04em', textTransform: 'uppercase', whiteSpace: 'nowrap', flexShrink: 0 }}>
+      {label}
+    </span>
+  )
+}
+
+// ── Main component ────────────────────────────────────────────────────────────
+
 export function ContextActionStrip() {
   const mode = useEditorStore((s) => s.mode)
   const document = useEditorStore((s) => s.activeDocument)
@@ -30,11 +92,18 @@ export function ContextActionStrip() {
   const selectedNodeIds = useEditorStore((s) => s.selection.selectedNodeIds)
   const lockAspectRatio = useEditorStore((s) => s.ui.lockAspectRatio)
   const multiSelectEnabled = useEditorStore((s) => s.ui.multiSelectEnabled)
+  const shapeType = useEditorStore((s) => s.ui.shapeType)
+  const penPathInProgress = useEditorStore((s) => s.ui.penPathInProgress)
   const selectionCount = selectedNodeIds.length
   const toggleAspectRatioLock = useEditorStore((s) => s.toggleAspectRatioLock)
   const toggleMultiSelectEnabled = useEditorStore((s) => s.toggleMultiSelectEnabled)
   const setPathEditMode = useEditorStore((s) => s.setPathEditMode)
   const toggleSnapEnabled = useEditorStore((s) => s.toggleSnapEnabled)
+  const setMode = useEditorStore((s) => s.setMode)
+  const setShapeType = useEditorStore((s) => s.setShapeType)
+  const commitPenPath = useEditorStore((s) => s.commitPenPath)
+  const discardPenPath = useEditorStore((s) => s.discardPenPath)
+  const openInspectorSection = useEditorStore((s) => s.openInspectorSection)
   const snapEnabled = view.snapEnabled
 
   const canGroup = selectionCount >= 2
@@ -142,55 +211,143 @@ export function ContextActionStrip() {
     setPathEditMode(null)
   }
 
-  const pill = (active = false, disabled = false): React.CSSProperties => ({
-    padding: '0 12px',
-    height: 34,
-    borderRadius: 10,
-    background: active ? 'rgba(96,165,250,0.22)' : 'rgba(255,255,255,0.08)',
-    border: active ? '1px solid rgba(96,165,250,0.4)' : '1px solid transparent',
-    color: active ? '#93c5fd' : disabled ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.9)',
-    whiteSpace: 'nowrap' as const,
-    display: 'flex',
-    alignItems: 'center',
-    gap: 5,
-    fontSize: 12,
-    fontWeight: 500,
-    flexShrink: 0,
-    cursor: disabled ? 'default' : 'pointer'
-  })
+  // ── Shape mode strip ───────────────────────────────────────────────────────
+  if (mode === 'shape') {
+    const shapeTypes: Array<{ type: ShapeDrawType; label: string; icon: React.ReactNode }> = [
+      { type: 'rect', label: 'Rect', icon: <Square size={14} /> },
+      { type: 'ellipse', label: 'Ellipse', icon: <Circle size={14} /> },
+      { type: 'line', label: 'Line', icon: <Minus size={14} /> },
+      { type: 'polygon', label: 'Polygon', icon: <Pentagon size={14} /> },
+      { type: 'star', label: 'Star', icon: <Star size={14} /> }
+    ]
+    return stripContainer(
+      <>
+        {modeBadge('Shape', '#93c5fd')}
+        {divider()}
+        <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', whiteSpace: 'nowrap', flexShrink: 0 }}>Drag to draw:</span>
+        {shapeTypes.map(({ type, label, icon }) => (
+          <button key={type} style={pill(shapeType === type)} onClick={() => setShapeType(type)}>
+            {icon} {label}
+          </button>
+        ))}
+        {divider()}
+        <button style={pill(snapEnabled)} onClick={toggleSnapEnabled}><Magnet size={14} /> Snap</button>
+        {divider()}
+        <button style={pill(false)} onClick={() => setMode('select')}>✗ Cancel</button>
+      </>
+    )
+  }
 
-  const iconPill = (active = false, disabled = false): React.CSSProperties => ({
-    ...pill(active, disabled),
-    padding: '0 10px'
-  })
+  // ── Pen mode strip ─────────────────────────────────────────────────────────
+  if (mode === 'pen') {
+    const penNode = penPathInProgress ? getNodeById(document.root, penPathInProgress.nodeId) : null
+    const anchorCount = penNode?.type === 'path'
+      ? (parsePathD(penNode.d)?.subpaths?.[0]?.anchors?.length ?? 0)
+      : 0
 
-  const divider = (): React.ReactNode => (
-    <span style={{ width: 1, height: 18, background: 'rgba(255,255,255,0.12)', flexShrink: 0 }} />
-  )
+    return stripContainer(
+      <>
+        {modeBadge('Pen', '#93c5fd')}
+        {penPathInProgress && anchorCount > 0 && (
+          <>
+            {divider()}
+            <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', whiteSpace: 'nowrap', flexShrink: 0 }}>
+              {anchorCount} {anchorCount === 1 ? 'point' : 'points'} — click first point to close
+            </span>
+          </>
+        )}
+        {!penPathInProgress && (
+          <>
+            {divider()}
+            <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', whiteSpace: 'nowrap', flexShrink: 0 }}>Click to place points</span>
+          </>
+        )}
+        {divider()}
+        {penPathInProgress && (
+          <button style={pill(false)} onClick={() => void commitPenPath()} title="Commit the path and return to select mode">
+            ✓ Done
+          </button>
+        )}
+        <button
+          style={{ ...pill(false), color: 'rgba(252,165,165,0.9)' }}
+          onClick={discardPenPath}
+          title={penPathInProgress ? 'Discard in-progress path' : 'Exit pen mode'}
+        >
+          ✗ {penPathInProgress ? 'Discard' : 'Cancel'}
+        </button>
+        {divider()}
+        <button style={pill(snapEnabled)} onClick={toggleSnapEnabled}><Magnet size={14} /> Snap</button>
+      </>
+    )
+  }
 
-  const modeLabel = MODE_LABELS[mode] ?? mode
+  // ── Text mode strip ────────────────────────────────────────────────────────
+  if (mode === 'text') {
+    return stripContainer(
+      <>
+        {modeBadge('Text', '#93c5fd')}
+        {divider()}
+        <Type size={14} style={{ color: 'rgba(255,255,255,0.4)', flexShrink: 0 }} />
+        <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', whiteSpace: 'nowrap', flexShrink: 0 }}>Tap canvas to place text</span>
+        {divider()}
+        <button style={pill(false)} onClick={() => setMode('select')}>✗ Cancel</button>
+      </>
+    )
+  }
+
+  // ── Paint mode strip ───────────────────────────────────────────────────────
+  if (mode === 'paint') {
+    return stripContainer(
+      <>
+        {modeBadge('Paint', '#93c5fd')}
+        {divider()}
+        <Paintbrush size={14} style={{ color: 'rgba(255,255,255,0.4)', flexShrink: 0 }} />
+        {selectionCount > 0 ? (
+          <>
+            <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', whiteSpace: 'nowrap', flexShrink: 0 }}>
+              {selectionCount === 1 ? '1 selected' : `${selectionCount} selected`}
+            </span>
+            {divider()}
+            <button style={pill(false)} onClick={() => openInspectorSection('appearance')}>
+              Open Colors
+            </button>
+          </>
+        ) : (
+          <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', whiteSpace: 'nowrap', flexShrink: 0 }}>Select an object to paint</span>
+        )}
+        {divider()}
+        <button style={pill(false)} onClick={() => setMode('select')}>Done</button>
+      </>
+    )
+  }
+
+  // ── Inspect mode strip ─────────────────────────────────────────────────────
+  if (mode === 'inspect') {
+    return stripContainer(
+      <>
+        {modeBadge('Inspect', '#93c5fd')}
+        {divider()}
+        <Search size={14} style={{ color: 'rgba(255,255,255,0.4)', flexShrink: 0 }} />
+        {firstSelectedNode ? (
+          <>
+            <span style={{ fontSize: 12, color: '#93c5fd', whiteSpace: 'nowrap', flexShrink: 0 }}>
+              {firstSelectedNode.type}{firstSelectedNode.name ? ` — ${firstSelectedNode.name}` : ''}
+            </span>
+            {divider()}
+            <button style={pill(false)} onClick={() => openInspectorSection('quick')}>Open Inspector</button>
+          </>
+        ) : (
+          <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', whiteSpace: 'nowrap', flexShrink: 0 }}>Select an object to inspect</span>
+        )}
+      </>
+    )
+  }
 
   // ── Path edit mode strip ───────────────────────────────────────────────────
   if (mode === 'path') {
-    return (
-      <div
-        className="hide-scrollbar"
-        style={{
-          height: 50,
-          display: 'flex',
-          alignItems: 'center',
-          gap: 6,
-          padding: '0 10px',
-          borderTop: '1px solid rgba(255,255,255,0.08)',
-          background: '#161616',
-          overflowX: 'auto',
-          WebkitOverflowScrolling: 'touch',
-          flexShrink: 0
-        }}
-      >
-        <span style={{ fontSize: 11, fontWeight: 600, color: '#60a5fa', letterSpacing: '0.04em', textTransform: 'uppercase', whiteSpace: 'nowrap', flexShrink: 0 }}>
-          Edit Path
-        </span>
+    return stripContainer(
+      <>
+        {modeBadge('Edit Path', '#60a5fa')}
 
         {divider()}
 
@@ -243,40 +400,18 @@ export function ContextActionStrip() {
         <button onClick={toggleSnapEnabled} style={pill(snapEnabled)} title="Toggle snapping">
           <Magnet size={14} /> Snap
         </button>
-      </div>
+      </>
     )
   }
 
-  return (
-    <div
-      className="hide-scrollbar"
-      style={{
-        height: 50,
-        display: 'flex',
-        alignItems: 'center',
-        gap: 6,
-        padding: '0 10px',
-        borderTop: '1px solid rgba(255,255,255,0.08)',
-        background: '#161616',
-        overflowX: 'auto',
-        WebkitOverflowScrolling: 'touch',
-        flexShrink: 0
-      }}
-    >
+  // ── Structure mode strip (select-like with layer focus) ────────────────────
+  const isStructureMode = mode === 'structure'
+
+  // ── Default strip: select / navigate / structure modes ────────────────────
+  return stripContainer(
+    <>
       {/* Mode badge */}
-      <span
-        style={{
-          fontSize: 11,
-          fontWeight: 600,
-          color: 'rgba(255,255,255,0.45)',
-          letterSpacing: '0.04em',
-          textTransform: 'uppercase',
-          whiteSpace: 'nowrap',
-          flexShrink: 0
-        }}
-      >
-        {modeLabel}
-      </span>
+      {modeBadge(MODE_LABELS[mode] ?? mode)}
 
       {divider()}
 
@@ -299,7 +434,7 @@ export function ContextActionStrip() {
       )}
 
       {/* Path operations — when selection contains convertible or path nodes */}
-      {selectionCount > 0 && (
+      {selectionCount > 0 && !isStructureMode && (
         <>
           {hasConvertible && (
             <>
@@ -320,27 +455,31 @@ export function ContextActionStrip() {
         </>
       )}
 
-      {/* Shape creation */}
-      <button onClick={addRect} style={pill(false)} title="Add Rectangle">
-        <Plus size={14} /> Rect
-      </button>
-      <button onClick={addEllipse} style={pill(false)} title="Add Ellipse">
-        <Circle size={14} /> Ellipse
-      </button>
-      <button onClick={addLine} style={pill(false)} title="Add Line">
-        <Minus size={14} /> Line
-      </button>
-      <button onClick={addPolygon} style={pill(false)} title="Add Polygon">
-        <Pentagon size={14} /> Polygon
-      </button>
-      <button onClick={addStar} style={pill(false)} title="Add Star">
-        <Star size={14} /> Star
-      </button>
-      <button onClick={addText} style={pill(false)} title="Add Text">
-        <Type size={14} /> Text
-      </button>
+      {/* Shape creation — only in select/navigate mode, not structure */}
+      {!isStructureMode && (
+        <>
+          <button onClick={addRect} style={pill(false)} title="Add Rectangle">
+            <Plus size={14} /> Rect
+          </button>
+          <button onClick={addEllipse} style={pill(false)} title="Add Ellipse">
+            <Circle size={14} /> Ellipse
+          </button>
+          <button onClick={addLine} style={pill(false)} title="Add Line">
+            <Minus size={14} /> Line
+          </button>
+          <button onClick={addPolygon} style={pill(false)} title="Add Polygon">
+            <Pentagon size={14} /> Polygon
+          </button>
+          <button onClick={addStar} style={pill(false)} title="Add Star">
+            <Star size={14} /> Star
+          </button>
+          <button onClick={addText} style={pill(false)} title="Add Text">
+            <Type size={14} /> Text
+          </button>
 
-      {divider()}
+          {divider()}
+        </>
+      )}
 
       {/* Object actions — visible when selection exists */}
       {selectionCount > 0 && (
@@ -383,7 +522,7 @@ export function ContextActionStrip() {
       )}
 
       {/* Boolean operations — when 2+ nodes selected */}
-      {canBooleanOp && (
+      {canBooleanOp && !isStructureMode && (
         <>
           <button onClick={() => void runCommand('path.booleanUnion', { nodeIds: selectedNodeIds })} style={pill(false)} title="Boolean Union">
             <Combine size={14} /> Union
@@ -448,16 +587,20 @@ export function ContextActionStrip() {
       <button disabled={!canUngroup} onClick={ungroupSelection} style={pill(false, !canUngroup)}>
         <Ungroup size={14} /> Ungroup
       </button>
-      <button onClick={toggleMultiSelectEnabled} style={pill(multiSelectEnabled)}>
-        <Layers size={14} /> Multi
-      </button>
-      <button onClick={toggleAspectRatioLock} style={pill(lockAspectRatio)}>
-        {lockAspectRatio ? <Lock size={14} /> : <Unlock size={14} />}
-        Aspect
-      </button>
-      <button onClick={toggleSnapEnabled} style={pill(snapEnabled)} title="Toggle snapping">
-        <Magnet size={14} /> Snap
-      </button>
-    </div>
+      {!isStructureMode && (
+        <>
+          <button onClick={toggleMultiSelectEnabled} style={pill(multiSelectEnabled)}>
+            <Layers size={14} /> Multi
+          </button>
+          <button onClick={toggleAspectRatioLock} style={pill(lockAspectRatio)}>
+            {lockAspectRatio ? <Lock size={14} /> : <Unlock size={14} />}
+            Aspect
+          </button>
+          <button onClick={toggleSnapEnabled} style={pill(snapEnabled)} title="Toggle snapping">
+            <Magnet size={14} /> Snap
+          </button>
+        </>
+      )}
+    </>
   )
 }

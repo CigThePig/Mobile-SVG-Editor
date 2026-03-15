@@ -61,6 +61,8 @@ interface EditorStore {
   openInspectorSection: (section: EditorUiState['inspectorSection']) => void
   replaceDocument: (doc: SvgDocument) => void
   toggleSnapEnabled: () => void
+  setActivePathPointIds: (ids: string[]) => void
+  setIsolationRoot: (id: string | undefined) => void
   setPathEditMode: (nodeId: string | null) => void
   setShapeType: (type: ShapeDrawType) => void
   setPenPathInProgress: (state: EditorUiState['penPathInProgress']) => void
@@ -120,6 +122,10 @@ export const useEditorStore = create<EditorStore>()(
           state.ui.penPathInProgress = null
           state.selection.selectedNodeIds = []
           state.selection.activeNodeId = undefined
+        }
+        // Clear isolation root when leaving select mode
+        if (mode !== 'select') {
+          state.selection.isolationRootId = undefined
         }
         state.mode = mode
       }),
@@ -221,6 +227,18 @@ export const useEditorStore = create<EditorStore>()(
     toggleSnapEnabled: () =>
       set((state) => {
         state.view.snapEnabled = !state.view.snapEnabled
+      }),
+    setActivePathPointIds: (ids) =>
+      set((state) => {
+        state.selection.activePathPointIds = ids
+      }),
+    setIsolationRoot: (id) =>
+      set((state) => {
+        state.selection.isolationRootId = id
+        if (!id) {
+          state.selection.selectedNodeIds = []
+          state.selection.activeNodeId = undefined
+        }
       }),
     setPathEditMode: (nodeId) =>
       set((state) => {

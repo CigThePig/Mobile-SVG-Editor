@@ -177,21 +177,21 @@ The codebase is ahead of the earlier README description, but the implementation 
 
 There are three recurring patterns in the repo:
 
-1. **Working features**: selection, transforms, grouping, inspector, persistence, path editing core, shape draw, pen, text placement, all mode wiring
+1. **Working features**: selection, transforms, grouping, inspector, persistence, path editing core, shape draw, pen, text placement, all mode wiring, recursive marquee selection, store-backed path point selection, isolation-aware group selection
 2. **Scaffolded features**: pages, resource models, asset tables, export-related models, structure/inspect/paint deeper workflows
-3. **Approximate math / temporary plumbing**: path bounds, transform folding, whole-document history, some root-only operations
+3. **Approximate math / temporary plumbing**: path bounds, transform folding, whole-document history
 
 ## Remaining issues and future phases
 
-### Phase 2: fix selection and path plumbing
+### Phase 2: fix selection and path plumbing ✓ COMPLETE
 
 Goal: eliminate root-only and hardcoded editing behavior.
 
-- Recursive marquee selection (currently only sees root-level children)
-- Recursive snap candidate collection in path edit overlay
-- Store-backed path point selection (currently local state in the overlay)
-- Remove hardcoded path action targeting (`subpathIndex: 0, anchorIndex: 0`)
-- Add isolation-aware selection behavior for groups
+- ✓ Recursive marquee selection — `collectSelectableNodes` now accepts an optional `isolationRootId` and returns children of the isolation root when in isolation mode
+- ✓ Recursive snap candidate collection in path edit overlay — snap candidates now traverse the full document tree
+- ✓ Store-backed path point selection — `activePathPointIds` in the store replaces the local `useState` in `PathEditOverlay`
+- ✓ Remove hardcoded path action targeting — `ContextActionStrip` path-mode buttons now use the selected anchor's actual `subpathIndex`/`anchorIndex` and are disabled when no point is selected
+- ✓ Isolation-aware selection behavior — double-tapping a group enters isolation mode (`isolationRootId`); marquee selection and tap-outside exit isolation mode
 
 ### Phase 3: harden structure editing
 
@@ -235,14 +235,13 @@ Goal: keep the editor usable as complexity rises.
 ### Known open issues
 
 - Pen mode is corner-only (no bezier handle drag while placing). Refine in path edit mode after committing.
-- Path edit context strip actions use hardcoded `subpathIndex: 0 / anchorIndex: 0` instead of targeting the selected anchor.
 - `duplicateNodesCommand` only works for root-level nodes.
-- `collectSelectableNodes` for marquee selection only iterates root children.
 - Transform math for ungroup is approximate for complex (rotate + scale) groups.
 - Path bounds calculation is approximate for relative commands and arcs.
 - Boolean operations flatten curves to sampled polygons.
 - Several pages (export, home, settings, inspect) remain as placeholders.
 - No grid, guide, or snap-to-grid overlay despite state fields existing.
+- Group isolation mode has no visual indicator (dimming of non-isolated nodes is Phase 3).
 
 ## Current run commands
 

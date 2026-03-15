@@ -305,6 +305,16 @@ export function boundsIntersect(a: NodeBounds, b: NodeBounds): boolean {
   return a.x <= b.x + b.width && a.x + a.width >= b.x && a.y <= b.y + b.height && a.y + a.height >= b.y
 }
 
-export function collectSelectableNodes(root: SvgNode): SvgNode[] {
-  return (root.children ?? []).filter((n) => n.visible !== false && !n.locked)
+function findNodeInTree(root: SvgNode, targetId: string): SvgNode | undefined {
+  if (root.id === targetId) return root
+  for (const child of root.children ?? []) {
+    const found = findNodeInTree(child, targetId)
+    if (found) return found
+  }
+  return undefined
+}
+
+export function collectSelectableNodes(root: SvgNode, isolationRootId?: string): SvgNode[] {
+  const contextNode = isolationRootId ? (findNodeInTree(root, isolationRootId) ?? root) : root
+  return (contextNode.children ?? []).filter((n) => n.visible !== false && !n.locked)
 }

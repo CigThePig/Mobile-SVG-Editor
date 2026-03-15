@@ -144,9 +144,23 @@ function renderNode(node: SvgNode, selectedIds: string[], onPointerDown: (event:
       )
     }
     case 'group':
+      return (
+        <g
+          key={node.id}
+          transform={transformToSvgString(node.transform)}
+          opacity={isSelected ? 0.9 : 1}
+          style={{ cursor: 'pointer' }}
+          onPointerDown={(e: ReactPointerEvent<SVGElement>) => {
+            e.stopPropagation()
+            onPointerDown(e, node.id)
+          }}
+        >
+          {node.children?.map((child) => renderNode(child, selectedIds, onPointerDown))}
+        </g>
+      )
     case 'root':
       return (
-        <g key={node.id} transform={transformToSvgString(node.transform)} opacity={isSelected ? 0.9 : 1}>
+        <g key={node.id}>
           {node.children?.map((child) => renderNode(child, selectedIds, onPointerDown))}
         </g>
       )
@@ -336,6 +350,7 @@ export function CanvasArtworkLayer() {
   const replaceDocument = useEditorStore((s) => s.replaceDocument)
   const pushSnapshot = useHistoryStore((s) => s.pushSnapshot)
   const setPathEditMode = useEditorStore((s) => s.setPathEditMode)
+  const setIsolationRoot = useEditorStore((s) => s.setIsolationRoot)
   const setPenPathInProgress = useEditorStore((s) => s.setPenPathInProgress)
   const setPenCursorPoint = useEditorStore((s) => s.setPenCursorPoint)
   const commitPenPath = useEditorStore((s) => s.commitPenPath)
@@ -660,7 +675,10 @@ export function CanvasArtworkLayer() {
       if (interaction?.kind === 'marquee-select') {
         const marqueeRect = useEditorStore.getState().ui.marqueeRect
         if (interaction.moved && marqueeRect) {
-          const matchedIds = collectSelectableNodes(useEditorStore.getState().activeDocument.root)
+          const matchedIds = collectSelectableNodes(
+            useEditorStore.getState().activeDocument.root,
+            useEditorStore.getState().selection.isolationRootId
+          )
             .filter((node) => {
               const bounds = getNodeBounds(node)
               return bounds ? boundsIntersect(bounds, marqueeRect) : false
@@ -723,13 +741,30 @@ export function CanvasArtworkLayer() {
     // In path mode: tapping a node that isn't the active path does nothing
     if (mode === 'path') return
 
-    // Double-tap detection: enter path edit mode for path nodes
+    // Isolation mode: exit when clicking a node outside the isolated group
+    const currentIsolationRootId = useEditorStore.getState().selection.isolationRootId
+    if (currentIsolationRootId) {
+      const isolationNode = getNodeById(document.root, currentIsolationRootId)
+      const isRelated = id === currentIsolationRootId ||
+        (isolationNode?.children ?? []).some((c) => c.id === id)
+      if (!isRelated) {
+        setIsolationRoot(undefined)
+        return
+      }
+    }
+
+    // Double-tap detection: enter path edit mode for path nodes, isolation for groups
     const now = Date.now()
     const lastTap = lastTapRef.current
     if (lastTap && lastTap.id === id && now - lastTap.time < 400) {
       lastTapRef.current = null
       if (clickedNode?.type === 'path') {
         setPathEditMode(id)
+        return
+      }
+      if (clickedNode?.type === 'group') {
+        setIsolationRoot(id)
+        clearSelection()
         return
       }
     }
@@ -841,6 +876,11 @@ export function CanvasArtworkLayer() {
     }
 
     if (mode === 'select') {
+      // Exit isolation mode on background tap
+      if (useEditorStore.getState().selection.isolationRootId) {
+        setIsolationRoot(undefined)
+        return
+      }
       const point = clientPointToDocumentPoint(event.clientX, event.clientY, svg, effectiveViewBox)
       interactionRef.current = {
         kind: 'marquee-select',

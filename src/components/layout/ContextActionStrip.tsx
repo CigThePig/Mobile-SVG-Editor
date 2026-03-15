@@ -11,6 +11,22 @@ import { getEffectiveViewBox } from '@/features/canvas/utils/viewBox'
 import { useEditorStore, type EditorMode, type ShapeDrawType } from '@/stores/editorStore'
 import { isConvertibleToPath } from '@/features/path/utils/pathConversion'
 import { parsePathD } from '@/features/path/utils/pathGeometry'
+import type { ParsedPath } from '@/features/path/utils/pathGeometry'
+import type { PathNode } from '@/model/nodes/nodeTypes'
+
+function findAnchorRef(
+  parsed: ParsedPath,
+  anchorId: string
+): { subpathIndex: number; anchorIndex: number } | null {
+  for (let si = 0; si < parsed.subpaths.length; si++) {
+    for (let ai = 0; ai < parsed.subpaths[si].anchors.length; ai++) {
+      if (parsed.subpaths[si].anchors[ai].id === anchorId) {
+        return { subpathIndex: si, anchorIndex: ai }
+      }
+    }
+  }
+  return null
+}
 
 const MODE_LABELS: Record<EditorMode, string> = {
   navigate: 'Pan',
@@ -104,6 +120,7 @@ export function ContextActionStrip() {
   const commitPenPath = useEditorStore((s) => s.commitPenPath)
   const discardPenPath = useEditorStore((s) => s.discardPenPath)
   const openInspectorSection = useEditorStore((s) => s.openInspectorSection)
+  const activePathPointIds = useEditorStore((s) => s.selection.activePathPointIds)
   const snapEnabled = view.snapEnabled
 
   const canGroup = selectionCount >= 2
@@ -345,6 +362,13 @@ export function ContextActionStrip() {
 
   // ── Path edit mode strip ───────────────────────────────────────────────────
   if (mode === 'path') {
+    const activePointId = activePathPointIds?.[0]
+    const activePointRef = (() => {
+      if (!activePointId || !activeNode || activeNode.type !== 'path') return null
+      return findAnchorRef(parsePathD((activeNode as PathNode).d), activePointId)
+    })()
+    const hasSelectedPoint = !!activePointRef
+
     return stripContainer(
       <>
         {modeBadge('Edit Path', '#60a5fa')}
@@ -360,26 +384,28 @@ export function ContextActionStrip() {
         {selectedNodeIds[0] && (
           <>
             <button
+              disabled={!hasSelectedPoint}
               onClick={() => {
-                if (selectedNodeIds[0]) void runCommand('path.convertPointType', { nodeId: selectedNodeIds[0], subpathIndex: 0, anchorIndex: 0, mode: 'corner' })
+                if (selectedNodeIds[0] && activePointRef) void runCommand('path.convertPointType', { nodeId: selectedNodeIds[0], subpathIndex: activePointRef.subpathIndex, anchorIndex: activePointRef.anchorIndex, mode: 'corner' })
               }}
-              style={pill(false)}
+              style={pill(false, !hasSelectedPoint)}
               title="Make selected point a corner"
             >
               Corner
             </button>
             <button
+              disabled={!hasSelectedPoint}
               onClick={() => {
-                if (selectedNodeIds[0]) void runCommand('path.convertPointType', { nodeId: selectedNodeIds[0], subpathIndex: 0, anchorIndex: 0, mode: 'smooth' })
+                if (selectedNodeIds[0] && activePointRef) void runCommand('path.convertPointType', { nodeId: selectedNodeIds[0], subpathIndex: activePointRef.subpathIndex, anchorIndex: activePointRef.anchorIndex, mode: 'smooth' })
               }}
-              style={pill(false)}
+              style={pill(false, !hasSelectedPoint)}
               title="Make selected point smooth"
             >
               Smooth
             </button>
             <button
               onClick={() => {
-                if (selectedNodeIds[0]) void runCommand('path.toggleClosed', { nodeId: selectedNodeIds[0], subpathIndex: 0 })
+                if (selectedNodeIds[0]) void runCommand('path.toggleClosed', { nodeId: selectedNodeIds[0], subpathIndex: activePointRef?.subpathIndex ?? 0 })
               }}
               style={pill(false)}
               title="Toggle path closed/open"
@@ -389,7 +415,12 @@ export function ContextActionStrip() {
 
             {divider()}
 
-            <button onClick={() => { if (selectedNodeIds[0]) void runCommand('path.deletePoint', { nodeId: selectedNodeIds[0], subpathIndex: 0, anchorIndex: 0 }) }} style={{ ...pill(false), color: 'rgba(252,165,165,0.9)' }} title="Delete selected point">
+            <button
+              disabled={!hasSelectedPoint}
+              onClick={() => { if (selectedNodeIds[0] && activePointRef) void runCommand('path.deletePoint', { nodeId: selectedNodeIds[0], subpathIndex: activePointRef.subpathIndex, anchorIndex: activePointRef.anchorIndex }) }}
+              style={{ ...pill(false, !hasSelectedPoint), color: hasSelectedPoint ? 'rgba(252,165,165,0.9)' : undefined }}
+              title="Delete selected point"
+            >
               <Trash2 size={14} /> Del Point
             </button>
           </>

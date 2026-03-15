@@ -1,11 +1,41 @@
+import { useState, useCallback } from 'react'
 import { Drawer } from 'vaul'
-import { Lock, Unlock, Layers, Eye, EyeOff } from 'lucide-react'
+import { Lock, Unlock, Layers, Eye, EyeOff, Trash2, Copy, ChevronsUp, ChevronsDown, ChevronUp, ChevronDown } from 'lucide-react'
 import { combineBounds, getNodeBounds } from '@/features/selection/utils/nodeBounds'
 import { getNodeById } from '@/features/documents/utils/documentMutations'
+import { runCommand } from '@/features/documents/services/commandRunner'
 import { useEditorStore } from '@/stores/editorStore'
-import type { RectNode, SvgNode } from '@/model/nodes/nodeTypes'
+import type { AppearanceModel, EllipseNode, RectNode, StarNode, SvgNode, TextNode } from '@/model/nodes/nodeTypes'
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+// ─── Style Helpers ────────────────────────────────────────────────────────────
+
+function getNodeStyle(node: SvgNode): AppearanceModel {
+  return (node as { style?: AppearanceModel }).style ?? {}
+}
+
+function getFillColor(node: SvgNode): string {
+  const style = getNodeStyle(node)
+  if (style.fill?.kind === 'solid') return style.fill.color ?? '#000000'
+  return '#000000'
+}
+
+function hasFill(node: SvgNode): boolean {
+  const style = getNodeStyle(node)
+  return style.fill !== undefined
+}
+
+function getStrokeColor(node: SvgNode): string {
+  return getNodeStyle(node).stroke?.color ?? '#000000'
+}
+
+function getStrokeWidth(node: SvgNode): number {
+  return getNodeStyle(node).stroke?.width ?? 0
+}
+
+function getOpacity(node: SvgNode): number {
+  const style = getNodeStyle(node)
+  return style.opacity !== undefined ? Math.round(style.opacity * 100) : 100
+}
 
 function fmt(n: number) {
   return Math.round(n).toString()
@@ -15,130 +45,227 @@ function fmtDeg(n: number) {
   return `${Math.round(n)}°`
 }
 
-/** Best-effort fill color string for display, or null. */
-function getDisplayFill(node: SvgNode): string | null {
-  const styled = node as { style?: { fill?: { kind: string; color?: string } } }
-  if (!styled.style?.fill) return null
-  if (styled.style.fill.kind === 'none') return null
-  if (styled.style.fill.kind === 'solid') return styled.style.fill.color ?? null
-  return null
-}
+// ─── Style tokens ─────────────────────────────────────────────────────────────
 
-/** Best-effort stroke color + width for display. */
-function getDisplayStroke(node: SvgNode): { color: string; width: number } | null {
-  const styled = node as { style?: { stroke?: { color?: string; width: number } } }
-  if (!styled.style?.stroke) return null
-  const { color, width } = styled.style.stroke
-  if (!color || width === 0) return null
-  return { color, width }
+const S = {
+  sectionHeader: {
+    fontSize: 10,
+    fontWeight: 700,
+    letterSpacing: '0.07em',
+    textTransform: 'uppercase' as const,
+    color: 'rgba(255,255,255,0.35)',
+    marginBottom: 4,
+    marginTop: 12
+  } as React.CSSProperties,
+  row: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: '6px 0',
+    borderBottom: '1px solid rgba(255,255,255,0.05)',
+    minHeight: 36,
+    gap: 8
+  } as React.CSSProperties,
+  label: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.5)',
+    flexShrink: 0,
+    minWidth: 80
+  } as React.CSSProperties,
+  value: {
+    fontSize: 12,
+    fontWeight: 500,
+    color: 'rgba(255,255,255,0.9)',
+    fontVariantNumeric: 'tabular-nums' as const,
+    textAlign: 'right' as const
+  } as React.CSSProperties,
+  accent: {
+    color: '#93c5fd'
+  } as React.CSSProperties,
+  input: {
+    background: 'rgba(255,255,255,0.08)',
+    border: '1px solid rgba(255,255,255,0.15)',
+    borderRadius: 6,
+    color: 'rgba(255,255,255,0.9)',
+    fontSize: 12,
+    padding: '4px 8px',
+    fontVariantNumeric: 'tabular-nums' as const,
+    width: 80,
+    textAlign: 'right' as const,
+    outline: 'none'
+  } as React.CSSProperties,
+  select: {
+    background: 'rgba(255,255,255,0.08)',
+    border: '1px solid rgba(255,255,255,0.15)',
+    borderRadius: 6,
+    color: 'rgba(255,255,255,0.9)',
+    fontSize: 12,
+    padding: '4px 6px',
+    outline: 'none'
+  } as React.CSSProperties,
+  actionBtn: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 4,
+    padding: '6px 12px',
+    borderRadius: 8,
+    background: 'rgba(255,255,255,0.08)',
+    border: '1px solid rgba(255,255,255,0.1)',
+    color: 'rgba(255,255,255,0.9)',
+    fontSize: 12,
+    cursor: 'pointer',
+    flexShrink: 0
+  } as React.CSSProperties,
+  actionBtnDanger: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 4,
+    padding: '6px 12px',
+    borderRadius: 8,
+    background: 'rgba(239,68,68,0.12)',
+    border: '1px solid rgba(239,68,68,0.25)',
+    color: 'rgba(252,165,165,0.9)',
+    fontSize: 12,
+    cursor: 'pointer',
+    flexShrink: 0
+  } as React.CSSProperties
 }
 
 // ─── Sub-components ──────────────────────────────────────────────────────────
 
 function SectionHeader({ label }: { label: string }) {
-  return (
-    <div
-      style={{
-        fontSize: 10,
-        fontWeight: 700,
-        letterSpacing: '0.07em',
-        textTransform: 'uppercase',
-        color: 'rgba(255,255,255,0.35)',
-        marginBottom: 4,
-        marginTop: 12
-      }}
-    >
-      {label}
-    </div>
-  )
+  return <div style={S.sectionHeader}>{label}</div>
 }
 
 function PropRow({ label, value, accent }: { label: string; value: React.ReactNode; accent?: boolean }) {
   return (
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: '6px 0',
-        borderBottom: '1px solid rgba(255,255,255,0.05)'
-      }}
-    >
-      <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', flexShrink: 0 }}>{label}</span>
-      <span
-        style={{
-          fontSize: 12,
-          fontWeight: 500,
-          color: accent ? '#93c5fd' : 'rgba(255,255,255,0.9)',
-          fontVariantNumeric: 'tabular-nums',
-          textAlign: 'right'
-        }}
-      >
-        {value}
-      </span>
+    <div style={S.row}>
+      <span style={S.label}>{label}</span>
+      <span style={{ ...S.value, ...(accent ? S.accent : {}) }}>{value}</span>
     </div>
   )
 }
 
-function ColorSwatch({ color }: { color: string }) {
+function ColorEditor({ label, color, nodeId, styleKey }: { label: string; color: string; nodeId: string; styleKey: 'fill' | 'stroke' }) {
+  const handleChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const nextColor = e.target.value
+      if (styleKey === 'fill') {
+        void runCommand('document.updateNodeFill', { nodeId, color: nextColor })
+      } else {
+        const node = getNodeById(useEditorStore.getState().activeDocument.root, nodeId)
+        if (!node) return
+        const existingStroke = getNodeStyle(node).stroke ?? { width: 1 }
+        void runCommand('document.updateNodeStroke', { nodeId, stroke: { ...existingStroke, color: nextColor } })
+      }
+    },
+    [nodeId, styleKey]
+  )
+
   return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-      <span
-        style={{
-          width: 14,
-          height: 14,
-          borderRadius: 3,
-          background: color,
-          border: '1px solid rgba(255,255,255,0.2)',
-          flexShrink: 0,
-          display: 'inline-block'
-        }}
-      />
-      <span style={{ fontVariantNumeric: 'tabular-nums' }}>{color}</span>
-    </span>
+    <div style={S.row}>
+      <span style={S.label}>{label}</span>
+      <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+        <span
+          style={{
+            width: 22,
+            height: 22,
+            borderRadius: 4,
+            background: color,
+            border: '1px solid rgba(255,255,255,0.2)',
+            display: 'inline-block',
+            flexShrink: 0
+          }}
+        />
+        <span style={{ ...S.value, fontSize: 11, fontFamily: 'monospace' }}>{color}</span>
+        <input
+          type="color"
+          value={color}
+          onChange={handleChange}
+          style={{ position: 'absolute', opacity: 0, width: 0, height: 0, pointerEvents: 'none' }}
+          tabIndex={-1}
+        />
+      </label>
+    </div>
   )
 }
 
-function ToggleRow({
+function NumberEditor({
   label,
-  active,
-  icon,
-  iconOff
+  value,
+  min,
+  max,
+  step = 1,
+  onCommit
 }: {
   label: string
-  active: boolean
-  icon: React.ReactNode
-  iconOff?: React.ReactNode
+  value: number
+  min?: number
+  max?: number
+  step?: number
+  onCommit: (v: number) => void
 }) {
+  const [local, setLocal] = useState<string | null>(null)
+  const displayed = local !== null ? local : fmt(value)
+
+  const commit = (raw: string) => {
+    setLocal(null)
+    const parsed = parseFloat(raw)
+    if (!isNaN(parsed)) {
+      const clamped = min !== undefined ? Math.max(min, max !== undefined ? Math.min(max, parsed) : parsed) : parsed
+      onCommit(clamped)
+    }
+  }
+
   return (
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: '6px 0',
-        borderBottom: '1px solid rgba(255,255,255,0.05)'
-      }}
-    >
-      <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>{label}</span>
-      <span
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 5,
-          fontSize: 12,
-          fontWeight: 500,
-          color: active ? '#93c5fd' : 'rgba(255,255,255,0.4)'
+    <div style={S.row}>
+      <span style={S.label}>{label}</span>
+      <input
+        type="number"
+        value={displayed}
+        min={min}
+        max={max}
+        step={step}
+        style={S.input}
+        onChange={(e) => setLocal(e.target.value)}
+        onBlur={(e) => commit(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.currentTarget.blur()
+          }
         }}
-      >
-        {active ? icon : (iconOff ?? icon)}
-        {active ? 'On' : 'Off'}
-      </span>
+      />
     </div>
   )
 }
 
-// ─── Geometry grid ────────────────────────────────────────────────────────────
+function TextareaEditor({ label, value, onCommit }: { label: string; value: string; onCommit: (v: string) => void }) {
+  const [local, setLocal] = useState<string | null>(null)
+  const displayed = local !== null ? local : value
+
+  return (
+    <div style={{ ...S.row, alignItems: 'flex-start', flexDirection: 'column', gap: 6 }}>
+      <span style={S.label}>{label}</span>
+      <textarea
+        value={displayed}
+        rows={3}
+        style={{
+          ...S.input,
+          width: '100%',
+          resize: 'vertical',
+          textAlign: 'left',
+          fontFamily: 'inherit',
+          boxSizing: 'border-box'
+        }}
+        onChange={(e) => setLocal(e.target.value)}
+        onBlur={(e) => {
+          onCommit(e.target.value)
+          setLocal(null)
+        }}
+      />
+    </div>
+  )
+}
 
 function GeometryGrid({ x, y, w, h }: { x: number; y: number; w: number; h: number }) {
   const cell = (label: string, val: string): React.ReactNode => (
@@ -172,36 +299,73 @@ function GeometryGrid({ x, y, w, h }: { x: number; y: number; w: number; h: numb
 
 function SingleNodeInspector({ node }: { node: SvgNode }) {
   const bounds = getNodeBounds(node)
-  const fill = getDisplayFill(node)
-  const stroke = getDisplayStroke(node)
   const rotation = node.transform?.rotate ?? 0
   const isGroup = node.type === 'group'
-
+  const nodeId = node.id
+  const style = getNodeStyle(node)
+  const fillColor = getFillColor(node)
+  const strokeColor = getStrokeColor(node)
+  const strokeWidth = getStrokeWidth(node)
+  const opacity = getOpacity(node)
   const typeLabel = node.type.charAt(0).toUpperCase() + node.type.slice(1)
+
+  const commitStrokeWidth = (w: number) => {
+    void runCommand('document.updateNodeStroke', {
+      nodeId,
+      stroke: { ...(style.stroke ?? { color: '#000000' }), width: w }
+    })
+  }
+
+  const commitOpacity = (pct: number) => {
+    void runCommand('document.updateNodeStyle', { nodeId, style: { opacity: pct / 100 } })
+  }
+
+  const toggleVisibility = () => {
+    void runCommand('document.setNodeVisibility', { nodeId, visible: !node.visible })
+  }
+
+  const toggleLock = () => {
+    void runCommand('document.setNodeLocked', { nodeId, locked: !node.locked })
+  }
+
+  const duplicate = () => void runCommand('document.duplicateNodes', { nodeIds: [nodeId] })
+  const deleteNode = () => void runCommand('document.deleteNodes', { nodeIds: [nodeId] })
+  const reorder = (direction: 'up' | 'down' | 'front' | 'back') =>
+    void runCommand('document.reorderNode', { nodeId, direction })
 
   return (
     <div>
       <SectionHeader label="Identity" />
-      <PropRow label="Type" value={typeLabel} />
-      {node.name && <PropRow label="Name" value={node.name} />}
-      <PropRow
-        label="Visibility"
-        value={
-          <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-            {node.visible ? <Eye size={12} /> : <EyeOff size={12} />}
-            {node.visible ? 'Visible' : 'Hidden'}
-          </span>
-        }
-      />
-      <PropRow
-        label="Lock"
-        value={
-          <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-            {node.locked ? <Lock size={12} /> : <Unlock size={12} />}
-            {node.locked ? 'Locked' : 'Unlocked'}
-          </span>
-        }
-      />
+
+      {/* Type + name row */}
+      <div style={S.row}>
+        <span style={S.label}>Type</span>
+        <span style={{ ...S.value, ...S.accent }}>{typeLabel}</span>
+      </div>
+
+      {/* Visibility toggle */}
+      <button
+        onClick={toggleVisibility}
+        style={{ ...S.row, width: '100%', background: 'none', border: 'none', cursor: 'pointer', padding: '6px 0' }}
+      >
+        <span style={S.label}>Visibility</span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: node.visible ? '#93c5fd' : 'rgba(255,255,255,0.4)' }}>
+          {node.visible ? <Eye size={13} /> : <EyeOff size={13} />}
+          {node.visible ? 'Visible' : 'Hidden'}
+        </span>
+      </button>
+
+      {/* Lock toggle */}
+      <button
+        onClick={toggleLock}
+        style={{ ...S.row, width: '100%', background: 'none', border: 'none', cursor: 'pointer', padding: '6px 0' }}
+      >
+        <span style={S.label}>Lock</span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: node.locked ? '#93c5fd' : 'rgba(255,255,255,0.4)' }}>
+          {node.locked ? <Lock size={13} /> : <Unlock size={13} />}
+          {node.locked ? 'Locked' : 'Unlocked'}
+        </span>
+      </button>
 
       {bounds && (
         <>
@@ -215,37 +379,166 @@ function SingleNodeInspector({ node }: { node: SvgNode }) {
         </>
       )}
 
-      {!isGroup && (fill || stroke) && (
+      {/* Appearance — for non-group nodes that have style */}
+      {!isGroup && hasFill(node) && (
         <>
           <SectionHeader label="Appearance" />
-          {fill && <PropRow label="Fill" value={<ColorSwatch color={fill} />} />}
-          {stroke && (
-            <PropRow
-              label="Stroke"
-              value={
-                <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <ColorSwatch color={stroke.color} />
-                  <span style={{ color: 'rgba(255,255,255,0.5)' }}>{stroke.width}px</span>
-                </span>
-              }
-            />
+          {style.fill?.kind !== 'none' && (
+            <ColorEditor label="Fill" color={fillColor} nodeId={nodeId} styleKey="fill" />
           )}
+          {style.stroke && (
+            <>
+              <ColorEditor label="Stroke" color={strokeColor} nodeId={nodeId} styleKey="stroke" />
+              <NumberEditor
+                label="Stroke width"
+                value={strokeWidth}
+                min={0}
+                max={200}
+                onCommit={commitStrokeWidth}
+              />
+            </>
+          )}
+          <NumberEditor
+            label="Opacity %"
+            value={opacity}
+            min={0}
+            max={100}
+            onCommit={commitOpacity}
+          />
         </>
       )}
 
-      {/* Rectangle-specific dimensions */}
+      {/* Rectangle-specific */}
       {node.type === 'rect' && (
         <>
           <SectionHeader label="Rectangle" />
-          <PropRow label="X" value={fmt((node as RectNode).x)} />
-          <PropRow label="Y" value={fmt((node as RectNode).y)} />
-          <PropRow label="Width" value={fmt((node as RectNode).width)} />
-          <PropRow label="Height" value={fmt((node as RectNode).height)} />
-          {((node as RectNode).rx ?? 0) > 0 && (
-            <PropRow label="Corner radius" value={fmt((node as RectNode).rx ?? 0)} />
-          )}
+          <NumberEditor
+            label="Corner radius"
+            value={(node as RectNode).rx ?? 0}
+            min={0}
+            max={500}
+            onCommit={(v) => void runCommand('document.updateNodeProperties', { nodeId, properties: { rx: v, ry: v } })}
+          />
         </>
       )}
+
+      {/* Ellipse-specific */}
+      {node.type === 'ellipse' && (
+        <>
+          <SectionHeader label="Ellipse" />
+          <NumberEditor
+            label="Radius X"
+            value={(node as EllipseNode).rx}
+            min={1}
+            onCommit={(v) => void runCommand('document.updateNodeProperties', { nodeId, properties: { rx: v } })}
+          />
+          <NumberEditor
+            label="Radius Y"
+            value={(node as EllipseNode).ry}
+            min={1}
+            onCommit={(v) => void runCommand('document.updateNodeProperties', { nodeId, properties: { ry: v } })}
+          />
+        </>
+      )}
+
+      {/* Star-specific */}
+      {node.type === 'star' && (
+        <>
+          <SectionHeader label="Star" />
+          <NumberEditor
+            label="Points"
+            value={(node as StarNode).numPoints}
+            min={3}
+            max={20}
+            onCommit={(v) => void runCommand('document.updateNodeProperties', { nodeId, properties: { numPoints: Math.round(v) } })}
+          />
+          <NumberEditor
+            label="Outer radius"
+            value={(node as StarNode).outerRadius}
+            min={1}
+            onCommit={(v) => void runCommand('document.updateNodeProperties', { nodeId, properties: { outerRadius: v } })}
+          />
+          <NumberEditor
+            label="Inner radius"
+            value={(node as StarNode).innerRadius}
+            min={1}
+            onCommit={(v) => void runCommand('document.updateNodeProperties', { nodeId, properties: { innerRadius: v } })}
+          />
+        </>
+      )}
+
+      {/* Text-specific */}
+      {node.type === 'text' && (
+        <>
+          <SectionHeader label="Text" />
+          <TextareaEditor
+            label="Content"
+            value={(node as TextNode).content}
+            onCommit={(v) => void runCommand('document.updateNodeProperties', { nodeId, properties: { content: v } })}
+          />
+          <NumberEditor
+            label="Font size"
+            value={(node as TextNode).textStyle?.fontSize ?? 16}
+            min={4}
+            max={1000}
+            onCommit={(v) =>
+              void runCommand('document.updateNodeProperties', {
+                nodeId,
+                properties: { textStyle: { ...(node as TextNode).textStyle, fontSize: v } }
+              })
+            }
+          />
+          <div style={S.row}>
+            <span style={S.label}>Font family</span>
+            <select
+              value={(node as TextNode).textStyle?.fontFamily ?? 'sans-serif'}
+              style={S.select}
+              onChange={(e) =>
+                void runCommand('document.updateNodeProperties', {
+                  nodeId,
+                  properties: { textStyle: { ...(node as TextNode).textStyle, fontFamily: e.target.value } }
+                })
+              }
+            >
+              <option value="sans-serif">Sans-serif</option>
+              <option value="serif">Serif</option>
+              <option value="monospace">Monospace</option>
+              <option value="cursive">Cursive</option>
+            </select>
+          </div>
+          <div style={S.row}>
+            <span style={S.label}>Font weight</span>
+            <select
+              value={String((node as TextNode).textStyle?.fontWeight ?? 'normal')}
+              style={S.select}
+              onChange={(e) =>
+                void runCommand('document.updateNodeProperties', {
+                  nodeId,
+                  properties: { textStyle: { ...(node as TextNode).textStyle, fontWeight: e.target.value } }
+                })
+              }
+            >
+              <option value="normal">Normal</option>
+              <option value="bold">Bold</option>
+              <option value="300">Light</option>
+              <option value="900">Black</option>
+            </select>
+          </div>
+        </>
+      )}
+
+      {/* Object actions */}
+      <SectionHeader label="Actions" />
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, paddingBottom: 8 }}>
+        <button onClick={duplicate} style={S.actionBtn}><Copy size={13} /> Duplicate</button>
+        <button onClick={deleteNode} style={S.actionBtnDanger}><Trash2 size={13} /> Delete</button>
+      </div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, paddingBottom: 8 }}>
+        <button onClick={() => reorder('front')} style={S.actionBtn}><ChevronsUp size={13} /> Front</button>
+        <button onClick={() => reorder('up')} style={S.actionBtn}><ChevronUp size={13} /> Forward</button>
+        <button onClick={() => reorder('down')} style={S.actionBtn}><ChevronDown size={13} /> Backward</button>
+        <button onClick={() => reorder('back')} style={S.actionBtn}><ChevronsDown size={13} /> Back</button>
+      </div>
     </div>
   )
 }
@@ -254,6 +547,34 @@ function SingleNodeInspector({ node }: { node: SvgNode }) {
 
 function MultiNodeInspector({ nodes }: { nodes: SvgNode[] }) {
   const bounds = combineBounds(nodes.map(getNodeBounds).filter(Boolean) as NonNullable<ReturnType<typeof getNodeBounds>>[])
+  const firstNode = nodes[0]
+  const firstStyle = firstNode ? getNodeStyle(firstNode) : {}
+  const fillColor = firstNode ? getFillColor(firstNode) : '#000000'
+  const strokeColor = firstNode ? getStrokeColor(firstNode) : '#000000'
+  const strokeWidth = firstNode ? getStrokeWidth(firstNode) : 0
+
+  const applyFillToAll = (color: string) => {
+    for (const node of nodes) {
+      void runCommand('document.updateNodeFill', { nodeId: node.id, color })
+    }
+  }
+
+  const applyStrokeToAll = (color: string) => {
+    for (const node of nodes) {
+      const style = getNodeStyle(node)
+      void runCommand('document.updateNodeStroke', { nodeId: node.id, stroke: { ...(style.stroke ?? { width: 1 }), color } })
+    }
+  }
+
+  const applyStrokeWidthToAll = (w: number) => {
+    for (const node of nodes) {
+      const style = getNodeStyle(node)
+      void runCommand('document.updateNodeStroke', { nodeId: node.id, stroke: { ...(style.stroke ?? { color: '#000000' }), width: w } })
+    }
+  }
+
+  const duplicate = () => void runCommand('document.duplicateNodes', { nodeIds: nodes.map((n) => n.id) })
+  const deleteAll = () => void runCommand('document.deleteNodes', { nodeIds: nodes.map((n) => n.id) })
 
   return (
     <div>
@@ -266,6 +587,39 @@ function MultiNodeInspector({ nodes }: { nodes: SvgNode[] }) {
           <GeometryGrid x={bounds.x} y={bounds.y} w={bounds.width} h={bounds.height} />
         </>
       )}
+
+      {firstNode && hasFill(firstNode) && (
+        <>
+          <SectionHeader label="Batch Style" />
+          <div style={S.row}>
+            <span style={S.label}>Fill</span>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+              <span style={{ width: 22, height: 22, borderRadius: 4, background: fillColor, border: '1px solid rgba(255,255,255,0.2)', display: 'inline-block' }} />
+              <span style={{ ...S.value, fontSize: 11, fontFamily: 'monospace' }}>{fillColor}</span>
+              <input type="color" value={fillColor} onChange={(e) => applyFillToAll(e.target.value)} style={{ position: 'absolute', opacity: 0, width: 0, height: 0, pointerEvents: 'none' }} tabIndex={-1} />
+            </label>
+          </div>
+          {firstStyle.stroke && (
+            <>
+              <div style={S.row}>
+                <span style={S.label}>Stroke</span>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                  <span style={{ width: 22, height: 22, borderRadius: 4, background: strokeColor, border: '1px solid rgba(255,255,255,0.2)', display: 'inline-block' }} />
+                  <span style={{ ...S.value, fontSize: 11, fontFamily: 'monospace' }}>{strokeColor}</span>
+                  <input type="color" value={strokeColor} onChange={(e) => applyStrokeToAll(e.target.value)} style={{ position: 'absolute', opacity: 0, width: 0, height: 0, pointerEvents: 'none' }} tabIndex={-1} />
+                </label>
+              </div>
+              <NumberEditor label="Stroke width" value={strokeWidth} min={0} max={200} onCommit={applyStrokeWidthToAll} />
+            </>
+          )}
+        </>
+      )}
+
+      <SectionHeader label="Actions" />
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, paddingBottom: 8 }}>
+        <button onClick={duplicate} style={S.actionBtn}><Copy size={13} /> Duplicate All</button>
+        <button onClick={deleteAll} style={S.actionBtnDanger}><Trash2 size={13} /> Delete All</button>
+      </div>
     </div>
   )
 }
@@ -299,6 +653,8 @@ export function InspectorSheet() {
   const setOpen = useEditorStore((s) => s.setRightPanelOpen)
   const lockAspectRatio = useEditorStore((s) => s.ui.lockAspectRatio)
   const multiSelectEnabled = useEditorStore((s) => s.ui.multiSelectEnabled)
+  const toggleAspectRatioLock = useEditorStore((s) => s.toggleAspectRatioLock)
+  const toggleMultiSelectEnabled = useEditorStore((s) => s.toggleMultiSelectEnabled)
   const selection = useEditorStore((s) => s.selection.selectedNodeIds)
   const document = useEditorStore((s) => s.activeDocument)
 
@@ -307,6 +663,19 @@ export function InspectorSheet() {
     .filter((n): n is SvgNode => Boolean(n))
 
   const activeNode = selectedNodes.length === 1 ? selectedNodes[0] : undefined
+
+  const sectionToggle = (label: string, active: boolean, icon: React.ReactNode, iconOff: React.ReactNode, onClick: () => void) => (
+    <button
+      onClick={onClick}
+      style={{ ...S.row, width: '100%', background: 'none', border: 'none', cursor: 'pointer', padding: '6px 0' }}
+    >
+      <span style={S.label}>{label}</span>
+      <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: active ? '#93c5fd' : 'rgba(255,255,255,0.4)' }}>
+        {active ? icon : iconOff}
+        {active ? 'On' : 'Off'}
+      </span>
+    </button>
+  )
 
   return (
     <Drawer.Root open={open} onOpenChange={setOpen}>
@@ -372,24 +741,14 @@ export function InspectorSheet() {
           </div>
 
           <div style={{ overflowY: 'auto', flex: 1, padding: '0 16px' }}>
-            {/* Selection content */}
             {selectedNodes.length === 0 && <EmptyInspector />}
             {activeNode && <SingleNodeInspector node={activeNode} />}
             {selectedNodes.length > 1 && <MultiNodeInspector nodes={selectedNodes} />}
 
-            {/* Editor state section — always shown at bottom */}
+            {/* Editor state section */}
             <SectionHeader label="Editor State" />
-            <ToggleRow
-              label="Multi-select"
-              active={multiSelectEnabled}
-              icon={<Layers size={12} />}
-            />
-            <ToggleRow
-              label="Aspect lock"
-              active={lockAspectRatio}
-              icon={<Lock size={12} />}
-              iconOff={<Unlock size={12} />}
-            />
+            {sectionToggle('Multi-select', multiSelectEnabled, <Layers size={12} />, <Layers size={12} />, toggleMultiSelectEnabled)}
+            {sectionToggle('Aspect lock', lockAspectRatio, <Lock size={12} />, <Unlock size={12} />, toggleAspectRatioLock)}
             <div style={{ height: 8 }} />
           </div>
         </Drawer.Content>

@@ -6,6 +6,7 @@ import type {
   PolygonNode,
   PolylineNode,
   RectNode,
+  StarNode,
   SvgNode,
   TextNode,
   TransformModel
@@ -239,6 +240,10 @@ function getBaseNodeBounds(node: SvgNode): NodeBounds | null {
       return fromPoints((node as PolylineNode).points)
     case 'polygon':
       return fromPoints((node as PolygonNode).points)
+    case 'star': {
+      const n = node as StarNode
+      return { x: n.cx - n.outerRadius, y: n.cy - n.outerRadius, width: n.outerRadius * 2, height: n.outerRadius * 2 }
+    }
     case 'path':
       return approxPathBounds((node as PathNode).d)
     case 'text': {
@@ -301,5 +306,5 @@ export function boundsIntersect(a: NodeBounds, b: NodeBounds): boolean {
 }
 
 export function collectSelectableNodes(root: SvgNode): SvgNode[] {
-  return root.children ?? []
+  return (root.children ?? []).filter((n) => n.visible !== false && !n.locked)
 }

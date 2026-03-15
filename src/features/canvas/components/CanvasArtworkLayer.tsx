@@ -9,6 +9,7 @@ import type {
   PolygonNode,
   PolylineNode,
   RectNode,
+  StarNode,
   SvgNode,
   TextNode,
   TransformModel
@@ -64,6 +65,16 @@ function transformToSvgString(transform?: TransformModel) {
   return parts.length ? parts.join(' ') : undefined
 }
 
+function computeStarPoints(cx: number, cy: number, outer: number, inner: number, n: number): string {
+  const pts: string[] = []
+  for (let i = 0; i < n * 2; i++) {
+    const angle = (Math.PI / n) * i - Math.PI / 2
+    const r = i % 2 === 0 ? outer : inner
+    pts.push(`${cx + r * Math.cos(angle)},${cy + r * Math.sin(angle)}`)
+  }
+  return pts.join(' ')
+}
+
 function renderNode(node: SvgNode, selectedIds: string[], onPointerDown: (event: ReactPointerEvent<SVGElement>, id: string) => void): ReactNode {
   if (node.visible === false) return null
   const isSelected = selectedIds.includes(node.id)
@@ -108,6 +119,12 @@ function renderNode(node: SvgNode, selectedIds: string[], onPointerDown: (event:
       const n = node as PolygonNode
       const { stroke, strokeWidth } = strokeFromNode(n)
       return <polygon {...common} points={n.points.map((p) => `${p.x},${p.y}`).join(' ')} fill={fillFromNode(n)} stroke={stroke} strokeWidth={strokeWidth} />
+    }
+    case 'star': {
+      const n = node as StarNode
+      const { stroke, strokeWidth } = strokeFromNode(n)
+      const pts = computeStarPoints(n.cx, n.cy, n.outerRadius, n.innerRadius, n.numPoints)
+      return <polygon {...common} points={pts} fill={fillFromNode(n)} stroke={stroke} strokeWidth={strokeWidth} />
     }
     case 'path': {
       const n = node as PathNode
@@ -413,6 +430,10 @@ export function CanvasArtworkLayer() {
       maybeBeginPinch(event.clientX, event.clientY)
       return
     }
+
+    // Locked nodes are not selectable or draggable
+    const clickedNode = getNodeById(document.root, id)
+    if (clickedNode?.locked) return
 
     const point = clientPointToDocumentPoint(event.clientX, event.clientY, svg, effectiveViewBox)
     const additive = multiSelectEnabled || event.shiftKey

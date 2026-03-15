@@ -1,15 +1,22 @@
-import { Plus, Group, Ungroup, Layers, Lock, Unlock, Trash2, Copy, ChevronUp, ChevronDown, ChevronsUp, ChevronsDown, Eye, EyeOff, Circle, Minus, Pentagon, Star, Type } from 'lucide-react'
+import {
+  Plus, Group, Ungroup, Layers, Lock, Unlock, Trash2, Copy,
+  ChevronUp, ChevronDown, ChevronsUp, ChevronsDown, Eye, EyeOff,
+  Circle, Minus, Pentagon, Star, Type, Spline,
+  AlignLeft, AlignCenter, AlignRight, AlignStartVertical, AlignCenterVertical, AlignEndVertical,
+  Magnet, Scissors, Combine, GitMerge
+} from 'lucide-react'
 import { getNodeById } from '@/features/documents/utils/documentMutations'
 import { runCommand } from '@/features/documents/services/commandRunner'
 import { getEffectiveViewBox } from '@/features/canvas/utils/viewBox'
 import { useEditorStore, type EditorMode } from '@/stores/editorStore'
+import { isConvertibleToPath } from '@/features/path/utils/pathConversion'
 
 const MODE_LABELS: Record<EditorMode, string> = {
   navigate: 'Pan',
   select: 'Select',
   shape: 'Shape',
   pen: 'Pen',
-  path: 'Path',
+  path: 'Edit Path',
   text: 'Text',
   paint: 'Paint',
   structure: 'Structure',
@@ -26,12 +33,24 @@ export function ContextActionStrip() {
   const selectionCount = selectedNodeIds.length
   const toggleAspectRatioLock = useEditorStore((s) => s.toggleAspectRatioLock)
   const toggleMultiSelectEnabled = useEditorStore((s) => s.toggleMultiSelectEnabled)
+  const setPathEditMode = useEditorStore((s) => s.setPathEditMode)
+  const toggleSnapEnabled = useEditorStore((s) => s.toggleSnapEnabled)
+  const snapEnabled = view.snapEnabled
 
   const canGroup = selectionCount >= 2
   const canUngroup = selectedNodeIds.some((id) => getNodeById(document.root, id)?.type === 'group')
   const firstSelectedNode = selectionCount > 0 ? getNodeById(document.root, selectedNodeIds[0]) : null
   const isLocked = firstSelectedNode?.locked ?? false
   const isVisible = firstSelectedNode?.visible ?? true
+
+  // Path-related states
+  const selectedNodes = selectedNodeIds.map((id) => getNodeById(document.root, id)).filter(Boolean)
+  const hasConvertible = selectedNodes.some((n) => n && isConvertibleToPath(n) && n.type !== 'path')
+  const activeNode = selectedNodeIds.length === 1 ? getNodeById(document.root, selectedNodeIds[0]) : null
+  const canEditPath = activeNode?.type === 'path'
+  const canBooleanOp = selectionCount >= 2
+  const canAlign = selectionCount >= 2
+  const canDistribute = selectionCount >= 3
 
   // Calculate a centered position for new shapes
   const getCenter = () => {
@@ -109,6 +128,20 @@ export function ContextActionStrip() {
     void runCommand('document.setNodeVisibility', { nodeId: selectedNodeIds[0], visible: !isVisible })
   }
 
+  const convertToPath = () => {
+    if (!hasConvertible) return
+    void runCommand('path.convertToPath', { nodeIds: selectedNodeIds })
+  }
+
+  const enterPathEdit = () => {
+    if (!canEditPath || !activeNode) return
+    setPathEditMode(activeNode.id)
+  }
+
+  const exitPathEdit = () => {
+    setPathEditMode(null)
+  }
+
   const pill = (active = false, disabled = false): React.CSSProperties => ({
     padding: '0 12px',
     height: 34,
@@ -136,6 +169,83 @@ export function ContextActionStrip() {
   )
 
   const modeLabel = MODE_LABELS[mode] ?? mode
+
+  // ── Path edit mode strip ───────────────────────────────────────────────────
+  if (mode === 'path') {
+    return (
+      <div
+        className="hide-scrollbar"
+        style={{
+          height: 50,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          padding: '0 10px',
+          borderTop: '1px solid rgba(255,255,255,0.08)',
+          background: '#161616',
+          overflowX: 'auto',
+          WebkitOverflowScrolling: 'touch',
+          flexShrink: 0
+        }}
+      >
+        <span style={{ fontSize: 11, fontWeight: 600, color: '#60a5fa', letterSpacing: '0.04em', textTransform: 'uppercase', whiteSpace: 'nowrap', flexShrink: 0 }}>
+          Edit Path
+        </span>
+
+        {divider()}
+
+        <button onClick={exitPathEdit} style={pill(false)} title="Done editing — return to select mode">
+          ✓ Done
+        </button>
+
+        {divider()}
+
+        {selectedNodeIds[0] && (
+          <>
+            <button
+              onClick={() => {
+                if (selectedNodeIds[0]) void runCommand('path.convertPointType', { nodeId: selectedNodeIds[0], subpathIndex: 0, anchorIndex: 0, mode: 'corner' })
+              }}
+              style={pill(false)}
+              title="Make selected point a corner"
+            >
+              Corner
+            </button>
+            <button
+              onClick={() => {
+                if (selectedNodeIds[0]) void runCommand('path.convertPointType', { nodeId: selectedNodeIds[0], subpathIndex: 0, anchorIndex: 0, mode: 'smooth' })
+              }}
+              style={pill(false)}
+              title="Make selected point smooth"
+            >
+              Smooth
+            </button>
+            <button
+              onClick={() => {
+                if (selectedNodeIds[0]) void runCommand('path.toggleClosed', { nodeId: selectedNodeIds[0], subpathIndex: 0 })
+              }}
+              style={pill(false)}
+              title="Toggle path closed/open"
+            >
+              <Scissors size={14} /> Close/Open
+            </button>
+
+            {divider()}
+
+            <button onClick={() => { if (selectedNodeIds[0]) void runCommand('path.deletePoint', { nodeId: selectedNodeIds[0], subpathIndex: 0, anchorIndex: 0 }) }} style={{ ...pill(false), color: 'rgba(252,165,165,0.9)' }} title="Delete selected point">
+              <Trash2 size={14} /> Del Point
+            </button>
+          </>
+        )}
+
+        {divider()}
+
+        <button onClick={toggleSnapEnabled} style={pill(snapEnabled)} title="Toggle snapping">
+          <Magnet size={14} /> Snap
+        </button>
+      </div>
+    )
+  }
 
   return (
     <div
@@ -186,6 +296,28 @@ export function ContextActionStrip() {
         >
           {selectionCount === 1 ? '1 selected' : `${selectionCount} selected`}
         </span>
+      )}
+
+      {/* Path operations — when selection contains convertible or path nodes */}
+      {selectionCount > 0 && (
+        <>
+          {hasConvertible && (
+            <>
+              <button onClick={convertToPath} style={pill(false)} title="Convert selection to editable path">
+                <Spline size={14} /> To Path
+              </button>
+              {divider()}
+            </>
+          )}
+          {canEditPath && !hasConvertible && (
+            <>
+              <button onClick={enterPathEdit} style={pill(false)} title="Enter path point-editing mode">
+                <Spline size={14} /> Edit Points
+              </button>
+              {divider()}
+            </>
+          )}
+        </>
       )}
 
       {/* Shape creation */}
@@ -250,6 +382,66 @@ export function ContextActionStrip() {
         </>
       )}
 
+      {/* Boolean operations — when 2+ nodes selected */}
+      {canBooleanOp && (
+        <>
+          <button onClick={() => void runCommand('path.booleanUnion', { nodeIds: selectedNodeIds })} style={pill(false)} title="Boolean Union">
+            <Combine size={14} /> Union
+          </button>
+          <button onClick={() => void runCommand('path.booleanSubtract', { nodeIds: selectedNodeIds })} style={pill(false)} title="Boolean Subtract (first minus rest)">
+            <Scissors size={14} /> Subtract
+          </button>
+          <button onClick={() => void runCommand('path.booleanIntersect', { nodeIds: selectedNodeIds })} style={pill(false)} title="Boolean Intersect">
+            <GitMerge size={14} /> Intersect
+          </button>
+          <button onClick={() => void runCommand('path.booleanExclude', { nodeIds: selectedNodeIds })} style={pill(false)} title="Boolean Exclude (XOR)">
+            Exclude
+          </button>
+
+          {divider()}
+        </>
+      )}
+
+      {/* Align operations — when 2+ nodes selected */}
+      {canAlign && (
+        <>
+          <button onClick={() => void runCommand('document.alignNodes', { nodeIds: selectedNodeIds, align: 'left' })} style={iconPill()} title="Align Left">
+            <AlignLeft size={14} />
+          </button>
+          <button onClick={() => void runCommand('document.alignNodes', { nodeIds: selectedNodeIds, align: 'hcenter' })} style={iconPill()} title="Align Center Horizontally">
+            <AlignCenter size={14} />
+          </button>
+          <button onClick={() => void runCommand('document.alignNodes', { nodeIds: selectedNodeIds, align: 'right' })} style={iconPill()} title="Align Right">
+            <AlignRight size={14} />
+          </button>
+          <button onClick={() => void runCommand('document.alignNodes', { nodeIds: selectedNodeIds, align: 'top' })} style={iconPill()} title="Align Top">
+            <AlignStartVertical size={14} />
+          </button>
+          <button onClick={() => void runCommand('document.alignNodes', { nodeIds: selectedNodeIds, align: 'vcenter' })} style={iconPill()} title="Align Center Vertically">
+            <AlignCenterVertical size={14} />
+          </button>
+          <button onClick={() => void runCommand('document.alignNodes', { nodeIds: selectedNodeIds, align: 'bottom' })} style={iconPill()} title="Align Bottom">
+            <AlignEndVertical size={14} />
+          </button>
+
+          {divider()}
+        </>
+      )}
+
+      {/* Distribute — when 3+ nodes selected */}
+      {canDistribute && (
+        <>
+          <button onClick={() => void runCommand('document.distributeNodes', { nodeIds: selectedNodeIds, direction: 'horizontal' })} style={pill(false)} title="Distribute Horizontally">
+            Distrib H
+          </button>
+          <button onClick={() => void runCommand('document.distributeNodes', { nodeIds: selectedNodeIds, direction: 'vertical' })} style={pill(false)} title="Distribute Vertically">
+            Distrib V
+          </button>
+
+          {divider()}
+        </>
+      )}
+
       <button disabled={!canGroup} onClick={groupSelection} style={pill(false, !canGroup)}>
         <Group size={14} /> Group
       </button>
@@ -262,6 +454,9 @@ export function ContextActionStrip() {
       <button onClick={toggleAspectRatioLock} style={pill(lockAspectRatio)}>
         {lockAspectRatio ? <Lock size={14} /> : <Unlock size={14} />}
         Aspect
+      </button>
+      <button onClick={toggleSnapEnabled} style={pill(snapEnabled)} title="Toggle snapping">
+        <Magnet size={14} /> Snap
       </button>
     </div>
   )

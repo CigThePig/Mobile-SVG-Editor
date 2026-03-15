@@ -255,6 +255,8 @@ export function CanvasArtworkLayer() {
   const setMarqueeRect = useEditorStore((s) => s.setMarqueeRect)
   const replaceDocument = useEditorStore((s) => s.replaceDocument)
   const pushSnapshot = useHistoryStore((s) => s.pushSnapshot)
+  const setPathEditMode = useEditorStore((s) => s.setPathEditMode)
+  const lastTapRef = useRef<{ id: string; time: number } | null>(null)
   const svgRef = useRef<SVGSVGElement | null>(null)
   const interactionRef = useRef<InteractionState>(null)
   const pinchRef = useRef<PinchState>(null)
@@ -439,6 +441,21 @@ export function CanvasArtworkLayer() {
     const clickedNode = getNodeById(document.root, id)
     if (clickedNode?.locked) return
 
+    // In path mode: tapping a node that isn't the active path does nothing
+    if (mode === 'path') return
+
+    // Double-tap detection: enter path edit mode for path nodes
+    const now = Date.now()
+    const lastTap = lastTapRef.current
+    if (lastTap && lastTap.id === id && now - lastTap.time < 400) {
+      lastTapRef.current = null
+      if (clickedNode?.type === 'path') {
+        setPathEditMode(id)
+        return
+      }
+    }
+    lastTapRef.current = { id, time: now }
+
     const point = clientPointToDocumentPoint(event.clientX, event.clientY, svg, effectiveViewBox)
     const additive = multiSelectEnabled || event.shiftKey
 
@@ -499,6 +516,12 @@ export function CanvasArtworkLayer() {
 
     const svg = svgRef.current
     if (!svg) return
+
+    // Exit path edit mode on background tap
+    if (mode === 'path') {
+      setPathEditMode(null)
+      return
+    }
 
     if (mode === 'navigate') {
       interactionRef.current = {

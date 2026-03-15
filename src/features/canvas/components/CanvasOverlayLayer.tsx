@@ -7,6 +7,7 @@ import { getNodeBounds, getBoundsForNodes, normalizeBounds, type NodeBounds } fr
 import { saveDocument } from '@/db/dexie/queries'
 import { useEditorStore } from '@/stores/editorStore'
 import { useHistoryStore } from '@/stores/historyStore'
+import { PathEditOverlay } from '@/features/path/components/PathEditOverlay'
 
 type ResizeHandlePosition = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w'
 
@@ -360,6 +361,9 @@ export function CanvasOverlayLayer() {
           rx={4}
         />
       ) : null}
+
+      {/* Path edit mode overlay */}
+      {mode === 'path' && <PathEditOverlay svgRef={svgRef} />}
 
       {/* Transform handles — only in select mode */}
       {selectionBounds && mode === 'select' ? (

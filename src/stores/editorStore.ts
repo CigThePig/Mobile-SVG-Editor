@@ -52,6 +52,8 @@ interface EditorStore {
   setMarqueeRect: (rect: NodeBounds | null) => void
   openInspectorSection: (section: EditorUiState['inspectorSection']) => void
   replaceDocument: (doc: SvgDocument) => void
+  toggleSnapEnabled: () => void
+  setPathEditMode: (nodeId: string | null) => void
 }
 
 function uniqueIds(ids: string[]) {
@@ -73,6 +75,14 @@ export const useEditorStore = create<EditorStore>()(
       showGrid: false,
       showGuides: true,
       snapEnabled: true,
+      snapConfig: {
+        snapToGrid: true,
+        gridSize: 10,
+        snapToPoints: true,
+        snapToBbox: true,
+        angleSnap: true,
+        angleSnapDegrees: 15
+      },
       outlineMode: false
     },
     ui: {
@@ -181,6 +191,24 @@ export const useEditorStore = create<EditorStore>()(
     replaceDocument: (doc) =>
       set((state) => {
         state.activeDocument = doc
+      }),
+    toggleSnapEnabled: () =>
+      set((state) => {
+        state.view.snapEnabled = !state.view.snapEnabled
+      }),
+    setPathEditMode: (nodeId) =>
+      set((state) => {
+        if (nodeId) {
+          state.mode = 'path'
+          state.selection.selectedNodeIds = [nodeId]
+          state.selection.activeNodeId = nodeId
+          state.selection.selectionMode = 'point'
+          state.selection.activePathPointIds = []
+        } else {
+          state.mode = 'select'
+          state.selection.selectionMode = 'object'
+          state.selection.activePathPointIds = []
+        }
       })
   }))
 )

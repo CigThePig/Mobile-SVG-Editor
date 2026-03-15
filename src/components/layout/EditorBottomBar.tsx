@@ -6,7 +6,7 @@ const modeConfig: { mode: EditorMode; icon: LucideIcon; label: string; available
   { mode: 'navigate', icon: Hand, label: 'Pan', available: true },
   { mode: 'select', icon: MousePointer2, label: 'Select', available: true },
   { mode: 'shape', icon: Square, label: 'Shape', available: true },
-  { mode: 'pen', icon: PenTool, label: 'Pen', available: false },
+  { mode: 'pen', icon: PenTool, label: 'Pen', available: true },
   { mode: 'text', icon: Type, label: 'Text', available: false },
   { mode: 'paint', icon: Paintbrush, label: 'Paint', available: false },
   { mode: 'structure', icon: LayoutGrid, label: 'Structure', available: false },
@@ -16,6 +16,17 @@ const modeConfig: { mode: EditorMode; icon: LucideIcon; label: string; available
 export function EditorBottomBar() {
   const mode = useEditorStore((s) => s.mode)
   const setMode = useEditorStore((s) => s.setMode)
+  const setPathEditMode = useEditorStore((s) => s.setPathEditMode)
+
+  const handleModeClick = (m: EditorMode) => {
+    // Clicking select (or any non-path tool) while in path mode exits path edit
+    if (mode === 'path' && m !== 'path') {
+      setPathEditMode(null)
+      if (m !== 'select') setMode(m)
+      return
+    }
+    setMode(m)
+  }
 
   return (
     <nav
@@ -36,11 +47,12 @@ export function EditorBottomBar() {
       }}
     >
       {modeConfig.map(({ mode: m, icon: Icon, label, available }) => {
-        const active = mode === m
+        // 'path' mode is shown as 'select' active when editing a path
+        const active = mode === m || (mode === 'path' && m === 'select')
         return (
           <button
             key={m}
-            onClick={() => setMode(m)}
+            onClick={() => handleModeClick(m)}
             title={available ? label : `${label} (coming soon)`}
             style={{
               flex: '1 1 0',

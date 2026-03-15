@@ -117,11 +117,10 @@ export function PathEditOverlay({ svgRef }: PathEditOverlayProps) {
   const view = useEditorStore((s) => s.view)
   const replaceDocument = useEditorStore((s) => s.replaceDocument)
   const activePathPointIds = useEditorStore((s) => s.selection.activePathPointIds)
-  const setSelection = useEditorStore((s) => s.setSelection)
+  const setActivePathPointIds = useEditorStore((s) => s.setActivePathPointIds)
   const pushSnapshot = useHistoryStore((s) => s.pushSnapshot)
 
   const dragRef = useRef<DragState | null>(null)
-  const [selectedPointIds, setSelectedPointIds] = useState<string[]>([])
   const [snapIndicator, setSnapIndicator] = useState<{ x: number; y: number } | null>(null)
 
   // The PathNode we're editing
@@ -137,17 +136,18 @@ export function PathEditOverlay({ svgRef }: PathEditOverlayProps) {
   const handleRadius = Math.max(3.5, 6 / zoom)
   const hitAreaHalfSize = Math.max(12, 24 / zoom)
 
-  // Build snap candidates from other visible nodes' bounds
+  // Build snap candidates from all other visible nodes' bounds (recursive)
   const snapCandidates: SnapCandidate[] = []
   if (view.snapEnabled) {
-    for (const child of document.root.children ?? []) {
-      if (child.id === activeNodeId) continue
-      if (!child.visible) continue
-      const bounds = getNodeBounds(child)
-      if (bounds) {
-        snapCandidates.push(...boundsToSnapCandidates(bounds))
+    const addSnapCandidates = (node: SvgNode) => {
+      for (const child of node.children ?? []) {
+        if (child.id === activeNodeId || !child.visible) continue
+        const bounds = getNodeBounds(child)
+        if (bounds) snapCandidates.push(...boundsToSnapCandidates(bounds))
+        addSnapCandidates(child)
       }
     }
+    addSnapCandidates(document.root)
   }
 
   const snapThreshold = screenThresholdToDocSpace(8, zoom)
@@ -249,8 +249,8 @@ export function PathEditOverlay({ svgRef }: PathEditOverlayProps) {
       startParsed: parsePathD(pathNode?.d ?? ''),
       moved: false
     }
-    setSelectedPointIds([anchorId])
-  }, [document, pathNode])
+    setActivePathPointIds([anchorId])
+  }, [document, pathNode, setActivePathPointIds])
 
   // ── Start drag on handle ───────────────────────────────────────────────────
 
@@ -313,7 +313,7 @@ export function PathEditOverlay({ svgRef }: PathEditOverlayProps) {
       {/* Anchor points and handles */}
       {parsed.subpaths.map((sp, si) =>
         sp.anchors.map((anchor, ai) => {
-          const isSelected = selectedPointIds.includes(anchor.id)
+          const isSelected = (activePathPointIds ?? []).includes(anchor.id)
           const hasH1 = !(Math.abs(anchor.h1x - anchor.x) < 0.5 && Math.abs(anchor.h1y - anchor.y) < 0.5)
           const hasH2 = !(Math.abs(anchor.h2x - anchor.x) < 0.5 && Math.abs(anchor.h2y - anchor.y) < 0.5)
 

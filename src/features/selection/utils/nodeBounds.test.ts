@@ -36,6 +36,20 @@ describe('collectSelectableNodes', () => {
     const root = makeRoot([])
     expect(collectSelectableNodes(root)).toEqual([])
   })
+
+  it('returns direct children of isolation root when isolationRootId is provided', () => {
+    const group = makeGroup('g1', [makeRect('r1', 0, 0), makeRect('r2', 50, 0)])
+    const root = makeRoot([group, makeRect('r3', 200, 0)])
+    const nodes = collectSelectableNodes(root, 'g1')
+    expect(nodes.map((n) => n.id)).toEqual(['r1', 'r2'])
+    expect(nodes.map((n) => n.id)).not.toContain('r3')
+  })
+
+  it('falls back to root children when isolationRootId is not found', () => {
+    const root = makeRoot([makeRect('r1', 0, 0)])
+    const nodes = collectSelectableNodes(root, 'nonexistent')
+    expect(nodes.map((n) => n.id)).toEqual(['r1'])
+  })
 })
 
 describe('getNodeBounds', () => {

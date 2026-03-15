@@ -1,6 +1,7 @@
 import { useEffect, type PropsWithChildren } from 'react'
 import { bootstrapCommands } from '@/features/documents/services/bootstrapCommands'
 import { useBootstrapDocument } from '@/features/workspace/hooks/useBootstrapDocument'
+import { NavigationProvider } from '@/app/routing/NavigationContext'
 
 function BootstrapLayer() {
   useBootstrapDocument()
@@ -13,9 +14,9 @@ export function AppProviders({ children }: PropsWithChildren) {
   }, [])
 
   return (
-    <>
+    <NavigationProvider>
       <BootstrapLayer />
       {children}
-    </>
+    </NavigationProvider>
   )
 }

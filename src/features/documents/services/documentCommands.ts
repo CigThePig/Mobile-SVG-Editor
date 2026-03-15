@@ -744,6 +744,33 @@ export const moveNodeOutOfGroupCommand: EditorCommand<{ nodeId: string }> = {
   }
 }
 
+export const addImageCommand: EditorCommand<{ href: string; x: number; y: number; width: number; height: number }> = {
+  id: 'document.addImage',
+  label: 'Insert Image',
+  run: ({ document }, payload) => {
+    const image: ImageNode = {
+      id: nanoid(),
+      type: 'image',
+      visible: true,
+      locked: false,
+      x: payload.x,
+      y: payload.y,
+      width: payload.width,
+      height: payload.height,
+      href: payload.href
+    }
+    return {
+      label: 'Insert Image',
+      selectionIds: [image.id],
+      document: {
+        ...document,
+        updatedAt: new Date().toISOString(),
+        root: { ...document.root, children: [...(document.root.children ?? []), image] }
+      }
+    }
+  }
+}
+
 export const moveNodesIntoGroupCommand: EditorCommand<{ nodeIds: string[]; targetGroupId: string }> = {
   id: 'document.moveNodesIntoGroup',
   label: 'Move Into Group',

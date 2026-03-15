@@ -1,6 +1,9 @@
 import { createEmptyDocument } from '@/model/document/documentFactory'
 import type { SvgDocument } from '@/model/document/documentTypes'
 import { db } from './db'
+import type { SnapshotRecord } from './db'
+
+export type { SnapshotRecord }
 
 export async function saveDocument(doc: SvgDocument) {
   const nextDoc: SvgDocument = {
@@ -33,4 +36,30 @@ export async function getMostRecentDocument() {
 export async function createAndSaveDocument(title?: string) {
   const doc = createEmptyDocument(title)
   return saveDocument(doc)
+}
+
+export async function deleteDocument(id: string) {
+  await db.documents.delete(id)
+  await db.snapshots.where('documentId').equals(id).delete()
+}
+
+export async function saveSnapshot(documentId: string, data: SvgDocument, label?: string) {
+  const { nanoid } = await import('nanoid')
+  const record = {
+    id: nanoid(),
+    documentId,
+    createdAt: new Date().toISOString(),
+    label,
+    data
+  }
+  await db.snapshots.put(record)
+  return record
+}
+
+export async function listSnapshots(documentId: string) {
+  return db.snapshots.where('documentId').equals(documentId).reverse().sortBy('createdAt')
+}
+
+export async function deleteSnapshot(id: string) {
+  await db.snapshots.delete(id)
 }

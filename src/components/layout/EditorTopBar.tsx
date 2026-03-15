@@ -1,7 +1,12 @@
-import { ArrowLeft, FilePlus, Undo2, Redo2, ZoomIn, ZoomOut, Save, Layers, SlidersHorizontal } from 'lucide-react'
+import { useRef, useState } from 'react'
+import { ArrowLeft, FilePlus, Undo2, Redo2, ZoomIn, ZoomOut, Save, Layers, SlidersHorizontal, ImagePlus, Download, History } from 'lucide-react'
 import { createAndSaveDocument, saveDocument } from '@/db/dexie/queries'
 import { useEditorStore } from '@/stores/editorStore'
 import { useHistoryStore } from '@/stores/historyStore'
+import { useNavigation } from '@/app/routing/NavigationContext'
+import { runCommand } from '@/features/documents/services/commandRunner'
+import { DocumentSettingsSheet } from '@/features/documents/components/DocumentSettingsSheet'
+import { SnapshotsSheet } from '@/features/snapshots/components/SnapshotsSheet'
 
 const iconBtn = (active = false, disabled = false): React.CSSProperties => ({
   width: 40,
@@ -32,6 +37,10 @@ export function EditorTopBar() {
   const clearHistory = useHistoryStore((s) => s.clear)
   const canUndo = useHistoryStore((s) => s.undoStack.length > 0)
   const canRedo = useHistoryStore((s) => s.redoStack.length > 0)
+  const { navigate } = useNavigation()
+  const imageInputRef = useRef<HTMLInputElement>(null)
+  const [docSettingsOpen, setDocSettingsOpen] = useState(false)
+  const [snapshotsOpen, setSnapshotsOpen] = useState(false)
 
   const zoomAroundCenter = (nextZoom: number) => {
     const clampedZoom = Math.min(4, Math.max(0.25, nextZoom))
@@ -61,6 +70,31 @@ export function EditorTopBar() {
   const handleSave = async () => {
     const saved = await saveDocument(activeDocument)
     replaceDocument(saved)
+  }
+
+  const handleImageImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      const href = ev.target?.result as string
+      const img = new Image()
+      img.onload = async () => {
+        const docW = activeDocument.width
+        const docH = activeDocument.height
+        const maxW = docW * 0.8
+        const maxH = docH * 0.8
+        const scale = Math.min(1, maxW / img.naturalWidth, maxH / img.naturalHeight)
+        const w = Math.round(img.naturalWidth * scale)
+        const h = Math.round(img.naturalHeight * scale)
+        const x = Math.round((docW - w) / 2)
+        const y = Math.round((docH - h) / 2)
+        await runCommand('document.addImage', { href, x, y, width: w, height: h })
+      }
+      img.src = href
+    }
+    reader.readAsDataURL(file)
+    e.target.value = ''
   }
 
   const handleUndo = async () => {
@@ -95,7 +129,7 @@ export function EditorTopBar() {
     >
       {/* Left group: nav + layers */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-        <button style={iconBtn()} aria-label="Back">
+        <button style={iconBtn()} onClick={() => navigate('home')} aria-label="Home">
           <ArrowLeft size={20} />
         </button>
         <button style={iconBtn()} onClick={() => void handleNew()} aria-label="New document">
@@ -104,10 +138,15 @@ export function EditorTopBar() {
         <button style={iconBtn(leftPanelOpen)} onClick={toggleLeftPanel} aria-label="Toggle layers">
           <Layers size={20} color={leftPanelOpen ? '#93c5fd' : undefined} />
         </button>
+        <button style={iconBtn()} onClick={() => imageInputRef.current?.click()} aria-label="Import image">
+          <ImagePlus size={20} />
+        </button>
+        <input ref={imageInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleImageImport} />
       </div>
 
-      {/* Center: title */}
-      <div
+      {/* Center: title (tap to open document settings) */}
+      <button
+        onClick={() => setDocSettingsOpen(true)}
         style={{
           flex: 1,
           fontSize: 14,
@@ -118,11 +157,16 @@ export function EditorTopBar() {
           textAlign: 'center',
           minWidth: 0,
           color: 'rgba(255,255,255,0.9)',
-          letterSpacing: '-0.01em'
+          letterSpacing: '-0.01em',
+          background: 'none',
+          border: 'none',
+          cursor: 'pointer',
+          padding: '0 4px'
         }}
       >
         {title}
-      </div>
+      </button>
+      <DocumentSettingsSheet open={docSettingsOpen} onOpenChange={setDocSettingsOpen} />
 
       {/* Right group: undo/redo | zoom | inspector | save */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -182,9 +226,16 @@ export function EditorTopBar() {
         <button style={iconBtn(rightPanelOpen)} onClick={toggleRightPanel} aria-label="Toggle inspector">
           <SlidersHorizontal size={20} color={rightPanelOpen ? '#93c5fd' : undefined} />
         </button>
+        <button onClick={() => navigate('export')} style={iconBtn()} aria-label="Export SVG">
+          <Download size={20} />
+        </button>
+        <button onClick={() => setSnapshotsOpen(true)} style={iconBtn()} aria-label="Snapshots">
+          <History size={20} />
+        </button>
         <button onClick={() => void handleSave()} style={iconBtn()} aria-label="Save">
           <Save size={20} />
         </button>
+        <SnapshotsSheet open={snapshotsOpen} onOpenChange={setSnapshotsOpen} />
       </div>
     </header>
   )

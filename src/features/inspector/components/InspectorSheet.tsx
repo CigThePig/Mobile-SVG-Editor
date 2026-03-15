@@ -1,11 +1,12 @@
 import { useState, useCallback } from 'react'
 import { Drawer } from 'vaul'
-import { Lock, Unlock, Layers, Eye, EyeOff, Trash2, Copy, ChevronsUp, ChevronsDown, ChevronUp, ChevronDown } from 'lucide-react'
+import { Lock, Unlock, Layers, Eye, EyeOff, Trash2, Copy, ChevronsUp, ChevronsDown, ChevronUp, ChevronDown, Palette } from 'lucide-react'
 import { combineBounds, getNodeBounds } from '@/features/selection/utils/nodeBounds'
 import { getNodeById } from '@/features/documents/utils/documentMutations'
 import { runCommand } from '@/features/documents/services/commandRunner'
 import { useEditorStore } from '@/stores/editorStore'
 import type { AppearanceModel, EllipseNode, RectNode, StarNode, SvgNode, TextNode } from '@/model/nodes/nodeTypes'
+import { GradientEditorSheet } from '@/features/resources/components/GradientEditorSheet'
 
 // ─── Style Helpers ────────────────────────────────────────────────────────────
 
@@ -657,6 +658,7 @@ export function InspectorSheet() {
   const toggleMultiSelectEnabled = useEditorStore((s) => s.toggleMultiSelectEnabled)
   const selection = useEditorStore((s) => s.selection.selectedNodeIds)
   const document = useEditorStore((s) => s.activeDocument)
+  const [gradientsOpen, setGradientsOpen] = useState(false)
 
   const selectedNodes = selection
     .map((id) => getNodeById(document.root, id))
@@ -749,10 +751,24 @@ export function InspectorSheet() {
             <SectionHeader label="Editor State" />
             {sectionToggle('Multi-select', multiSelectEnabled, <Layers size={12} />, <Layers size={12} />, toggleMultiSelectEnabled)}
             {sectionToggle('Aspect lock', lockAspectRatio, <Lock size={12} />, <Unlock size={12} />, toggleAspectRatioLock)}
+
+            {/* Resources */}
+            <SectionHeader label="Resources" />
+            <button
+              onClick={() => setGradientsOpen(true)}
+              style={{ ...S.row, width: '100%', background: 'none', border: 'none', cursor: 'pointer', padding: '6px 0' }}
+            >
+              <span style={S.label}>Gradients</span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: '#93c5fd' }}>
+                <Palette size={13} />
+                Edit
+              </span>
+            </button>
             <div style={{ height: 8 }} />
           </div>
         </Drawer.Content>
       </Drawer.Portal>
+      <GradientEditorSheet open={gradientsOpen} onOpenChange={setGradientsOpen} />
     </Drawer.Root>
   )
 }

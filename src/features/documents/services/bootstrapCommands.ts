@@ -6,6 +6,7 @@ import {
   addPolygonCommand,
   addStarCommand,
   addTextCommand,
+  addImageCommand,
   deleteNodesCommand,
   duplicateNodesCommand,
   reorderNodeCommand,
@@ -20,6 +21,12 @@ import {
   moveNodeOutOfGroupCommand,
   moveNodesIntoGroupCommand
 } from './documentCommands'
+import {
+  addGradientCommand,
+  updateGradientCommand,
+  deleteGradientCommand,
+  applyGradientToNodeCommand
+} from './resourceCommands'
 import {
   convertToPathCommand,
   movePointCommand,
@@ -46,6 +53,7 @@ export function bootstrapCommands() {
   registerCommand(addPolygonCommand)
   registerCommand(addStarCommand)
   registerCommand(addTextCommand)
+  registerCommand(addImageCommand)
   registerCommand(deleteNodesCommand)
   registerCommand(duplicateNodesCommand)
   registerCommand(reorderNodeCommand)
@@ -59,6 +67,11 @@ export function bootstrapCommands() {
   registerCommand(ungroupSelectionCommand)
   registerCommand(moveNodeOutOfGroupCommand)
   registerCommand(moveNodesIntoGroupCommand)
+  // Resource commands
+  registerCommand(addGradientCommand)
+  registerCommand(updateGradientCommand)
+  registerCommand(deleteGradientCommand)
+  registerCommand(applyGradientToNodeCommand)
   // Path / geometry editing commands
   registerCommand(convertToPathCommand)
   registerCommand(movePointCommand)

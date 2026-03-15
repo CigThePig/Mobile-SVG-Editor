@@ -24,11 +24,13 @@ import { useHistoryStore } from '@/stores/historyStore'
 import { runCommand } from '@/features/documents/services/commandRunner'
 import { parsePathD, serializePathD } from '@/features/path/utils/pathGeometry'
 
-function fillFromNode(node: { style?: { fill?: { kind: string; color?: string } } }) {
+function fillFromNode(node: { style?: { fill?: { kind: string; color?: string; resourceId?: string } } }) {
   if (!node.style?.fill) return 'transparent'
   if (node.style.fill.kind === 'none') return 'transparent'
   if (node.style.fill.kind === 'solid') return node.style.fill.color ?? '#ffffff'
-  return '#ffffff'
+  if (node.style.fill.kind === 'gradient' && node.style.fill.resourceId) return `url(#${node.style.fill.resourceId})`
+  if (node.style.fill.kind === 'pattern' && node.style.fill.resourceId) return `url(#${node.style.fill.resourceId})`
+  return 'transparent'
 }
 
 function strokeFromNode(node: { style?: { stroke?: { color?: string; width: number } } }) {
@@ -928,6 +930,7 @@ export function CanvasArtworkLayer() {
   }
 
   const shapeDrawInteraction = interactionRef.current?.kind === 'shape-draw' ? interactionRef.current : null
+  const gradients = document.resources?.gradients ?? []
 
   return (
     <svg
@@ -939,6 +942,25 @@ export function CanvasArtworkLayer() {
       onWheel={handleWheel}
       style={{ touchAction: 'none' }}
     >
+      {gradients.length > 0 && (
+        <defs>
+          {gradients.map((g) =>
+            g.type === 'linearGradient' ? (
+              <linearGradient key={g.id} id={g.id} x1="0" y1="0" x2="1" y2="0" gradientUnits="objectBoundingBox">
+                {g.stops.map((s, i) => (
+                  <stop key={i} offset={`${(s.offset * 100).toFixed(1)}%`} stopColor={s.color} stopOpacity={s.opacity ?? 1} />
+                ))}
+              </linearGradient>
+            ) : (
+              <radialGradient key={g.id} id={g.id} cx="50%" cy="50%" r="50%" gradientUnits="objectBoundingBox">
+                {g.stops.map((s, i) => (
+                  <stop key={i} offset={`${(s.offset * 100).toFixed(1)}%`} stopColor={s.color} stopOpacity={s.opacity ?? 1} />
+                ))}
+              </radialGradient>
+            )
+          )}
+        </defs>
+      )}
       {document.root.children?.map((node) => {
         const isDimmed = Boolean(isolationRootId) && node.id !== isolationRootId
         if (isDimmed) {

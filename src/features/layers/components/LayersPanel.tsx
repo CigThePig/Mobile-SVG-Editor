@@ -1,6 +1,8 @@
 import type { MouseEvent } from 'react'
 import { Drawer } from 'vaul'
+import { Eye, EyeOff, Lock, Unlock } from 'lucide-react'
 import type { SvgNode } from '@/model/nodes/nodeTypes'
+import { runCommand } from '@/features/documents/services/commandRunner'
 import { useEditorStore } from '@/stores/editorStore'
 
 function uniqueIds(ids: string[]) {
@@ -22,6 +24,9 @@ function typeGlyph(type: SvgNode['type']): string {
     case 'ellipse': return 'E'
     case 'line': return 'L'
     case 'path': return 'P'
+    case 'star': return '★'
+    case 'polygon': return 'Pg'
+    case 'polyline': return 'Pl'
     case 'text': return 'T'
     case 'image': return 'I'
     default: return type.charAt(0).toUpperCase()
@@ -37,6 +42,10 @@ function typeBadgeColor(type: SvgNode['type']): string {
     case 'ellipse': return 'rgba(167,139,250,0.18)'
     case 'path': return 'rgba(52,211,153,0.18)'
     case 'text': return 'rgba(251,146,60,0.18)'
+    case 'star': return 'rgba(251,191,36,0.22)'
+    case 'polygon':
+    case 'polyline': return 'rgba(110,231,183,0.18)'
+    case 'line': return 'rgba(148,163,184,0.18)'
     default: return 'rgba(255,255,255,0.1)'
   }
 }
@@ -49,6 +58,10 @@ function typeBadgeTextColor(type: SvgNode['type']): string {
     case 'ellipse': return '#c4b5fd'
     case 'path': return '#6ee7b7'
     case 'text': return '#fdba74'
+    case 'star': return '#fbbf24'
+    case 'polygon':
+    case 'polyline': return '#6ee7b7'
+    case 'line': return '#94a3b8'
     default: return 'rgba(255,255,255,0.7)'
   }
 }
@@ -65,108 +78,166 @@ function LayerRow({ node, depth, isSelected, onSelect }: LayerRowProps) {
   const hasChildren = Boolean(node.children?.length)
   const childCount = node.children?.length ?? 0
 
+  const toggleVisibility = (e: MouseEvent) => {
+    e.stopPropagation()
+    void runCommand('document.setNodeVisibility', { nodeId: node.id, visible: !node.visible })
+  }
+
+  const toggleLock = (e: MouseEvent) => {
+    e.stopPropagation()
+    void runCommand('document.setNodeLocked', { nodeId: node.id, locked: !node.locked })
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column' }}>
-      <button
-        onClick={(event) => onSelect(event, node.id)}
-        style={{
-          position: 'relative',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8,
-          paddingLeft: 10 + depth * 16,
-          paddingRight: 10,
-          height: 44,
-          borderRadius: 10,
-          background: isSelected ? 'rgba(96,165,250,0.14)' : 'transparent',
-          border: isSelected ? '1px solid rgba(96,165,250,0.3)' : '1px solid transparent',
-          textAlign: 'left',
-          width: '100%',
-          flexShrink: 0
-        }}
-      >
-        {/* Depth indicator line */}
-        {depth > 0 && (
-          <span
-            style={{
-              position: 'absolute',
-              left: 10 + (depth - 1) * 16 + 7,
-              top: 0,
-              bottom: 0,
-              width: 1,
-              background: 'rgba(255,255,255,0.12)'
-            }}
-          />
-        )}
-
-        {/* Left accent for selected */}
-        {isSelected && (
-          <span
-            style={{
-              position: 'absolute',
-              left: 0,
-              top: 6,
-              bottom: 6,
-              width: 3,
-              borderRadius: 2,
-              background: '#60a5fa'
-            }}
-          />
-        )}
-
-        {/* Type badge */}
-        <span
+      <div style={{ display: 'flex', alignItems: 'center', gap: 0 }}>
+        <button
+          onClick={(event) => onSelect(event, node.id)}
           style={{
-            width: 22,
-            height: 22,
-            borderRadius: 6,
-            background: typeBadgeColor(node.type),
-            color: typeBadgeTextColor(node.type),
-            fontSize: 11,
-            fontWeight: 700,
+            position: 'relative',
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'center',
-            flexShrink: 0,
-            letterSpacing: 0
-          }}
-        >
-          {typeGlyph(node.type)}
-        </span>
-
-        {/* Label */}
-        <span
-          style={{
+            gap: 8,
+            paddingLeft: 10 + depth * 16,
+            paddingRight: 8,
+            height: 44,
+            borderRadius: 10,
+            background: isSelected ? 'rgba(96,165,250,0.14)' : 'transparent',
+            border: isSelected ? '1px solid rgba(96,165,250,0.3)' : '1px solid transparent',
+            textAlign: 'left',
             flex: 1,
-            fontSize: 13,
-            fontWeight: isSelected ? 600 : 400,
-            color: isSelected ? '#e2e8f0' : 'rgba(255,255,255,0.85)',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
             minWidth: 0
           }}
         >
-          {labelForNode(node)}
-        </span>
+          {/* Depth indicator line */}
+          {depth > 0 && (
+            <span
+              style={{
+                position: 'absolute',
+                left: 10 + (depth - 1) * 16 + 7,
+                top: 0,
+                bottom: 0,
+                width: 1,
+                background: 'rgba(255,255,255,0.12)'
+              }}
+            />
+          )}
 
-        {/* Child count badge for groups */}
-        {hasChildren && (
+          {/* Left accent for selected */}
+          {isSelected && (
+            <span
+              style={{
+                position: 'absolute',
+                left: 0,
+                top: 6,
+                bottom: 6,
+                width: 3,
+                borderRadius: 2,
+                background: '#60a5fa'
+              }}
+            />
+          )}
+
+          {/* Type badge */}
           <span
             style={{
-              fontSize: 11,
-              fontWeight: 500,
-              color: 'rgba(255,255,255,0.4)',
-              background: 'rgba(255,255,255,0.07)',
+              width: 22,
+              height: 22,
               borderRadius: 6,
-              padding: '1px 6px',
-              flexShrink: 0
+              background: typeBadgeColor(node.type),
+              color: typeBadgeTextColor(node.type),
+              fontSize: 11,
+              fontWeight: 700,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+              letterSpacing: 0,
+              opacity: node.visible === false ? 0.4 : 1
             }}
           >
-            {childCount}
+            {typeGlyph(node.type)}
           </span>
-        )}
-      </button>
+
+          {/* Label */}
+          <span
+            style={{
+              flex: 1,
+              fontSize: 13,
+              fontWeight: isSelected ? 600 : 400,
+              color: node.visible === false
+                ? 'rgba(255,255,255,0.35)'
+                : isSelected ? '#e2e8f0' : 'rgba(255,255,255,0.85)',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              minWidth: 0,
+              textDecoration: node.visible === false ? 'line-through' : 'none'
+            }}
+          >
+            {labelForNode(node)}
+          </span>
+
+          {/* Child count badge for groups */}
+          {hasChildren && (
+            <span
+              style={{
+                fontSize: 11,
+                fontWeight: 500,
+                color: 'rgba(255,255,255,0.4)',
+                background: 'rgba(255,255,255,0.07)',
+                borderRadius: 6,
+                padding: '1px 6px',
+                flexShrink: 0
+              }}
+            >
+              {childCount}
+            </span>
+          )}
+        </button>
+
+        {/* Visibility icon */}
+        <button
+          onClick={toggleVisibility}
+          title={node.visible === false ? 'Show' : 'Hide'}
+          style={{
+            width: 32,
+            height: 44,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: 'none',
+            border: 'none',
+            cursor: 'pointer',
+            color: node.visible === false ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.45)',
+            flexShrink: 0,
+            borderRadius: 6
+          }}
+        >
+          {node.visible === false ? <EyeOff size={13} /> : <Eye size={13} />}
+        </button>
+
+        {/* Lock icon */}
+        <button
+          onClick={toggleLock}
+          title={node.locked ? 'Unlock' : 'Lock'}
+          style={{
+            width: 32,
+            height: 44,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: 'none',
+            border: 'none',
+            cursor: 'pointer',
+            color: node.locked ? '#93c5fd' : 'rgba(255,255,255,0.3)',
+            flexShrink: 0,
+            borderRadius: 6
+          }}
+        >
+          {node.locked ? <Lock size={13} /> : <Unlock size={13} />}
+        </button>
+      </div>
 
       {/* Children */}
       {hasChildren &&
@@ -301,7 +372,7 @@ export function LayersPanel() {
               >
                 <span style={{ fontSize: 28 }}>□</span>
                 <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)', textAlign: 'center' }}>
-                  No layers yet.{'\n'}Add a rectangle to get started.
+                  No layers yet. Add a shape to get started.
                 </span>
               </div>
             ) : (

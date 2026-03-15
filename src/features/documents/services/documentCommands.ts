@@ -1,6 +1,6 @@
 import { nanoid } from 'nanoid'
 import type { SvgDocument } from '@/model/document/documentTypes'
-import type { CircleNode, EllipseNode, GroupNode, ImageNode, LineNode, PathNode, PolygonNode, PolylineNode, RootNode, SvgNode, RectNode, TextNode } from '@/model/nodes/nodeTypes'
+import type { AppearanceModel, CircleNode, EllipseNode, GroupNode, ImageNode, LineNode, PathNode, PolygonNode, PolylineNode, RootNode, StarNode, StrokeModel, SvgNode, RectNode, TextNode } from '@/model/nodes/nodeTypes'
 import type { EditorCommand } from './commands'
 
 function isContainerNode(node: SvgNode): node is RootNode | GroupNode {
@@ -255,6 +255,346 @@ export const addRectCommand: EditorCommand<{ x: number; y: number; width: number
           children: [...(document.root.children ?? []), rect]
         }
       }
+    }
+  }
+}
+
+// ─── Tree helpers ────────────────────────────────────────────────────────────
+
+function removeNodesFromTree(node: SvgNode, targetIds: Set<string>): SvgNode {
+  if (!node.children?.length) return node
+  const nextChildren = node.children
+    .filter((child) => !targetIds.has(child.id))
+    .map((child) => removeNodesFromTree(child, targetIds))
+  return { ...node, children: nextChildren }
+}
+
+function updateNodeInTree(node: SvgNode, targetId: string, updater: (n: SvgNode) => SvgNode): SvgNode {
+  if (node.id === targetId) return updater(node)
+  if (!node.children?.length) return node
+  return { ...node, children: node.children.map((child) => updateNodeInTree(child, targetId, updater)) }
+}
+
+function deepCloneWithNewIds(node: SvgNode): SvgNode {
+  const clone = JSON.parse(JSON.stringify(node)) as SvgNode
+  clone.id = nanoid()
+  if (clone.children?.length) {
+    clone.children = clone.children.map(deepCloneWithNewIds)
+  }
+  return clone
+}
+
+function offsetNode(node: SvgNode, dx: number, dy: number): SvgNode {
+  switch (node.type) {
+    case 'rect': return { ...node, x: (node as RectNode).x + dx, y: (node as RectNode).y + dy }
+    case 'ellipse': return { ...node, cx: (node as EllipseNode).cx + dx, cy: (node as EllipseNode).cy + dy }
+    case 'circle': return { ...node, cx: (node as CircleNode).cx + dx, cy: (node as CircleNode).cy + dy }
+    case 'line': {
+      const n = node as LineNode
+      return { ...n, x1: n.x1 + dx, y1: n.y1 + dy, x2: n.x2 + dx, y2: n.y2 + dy }
+    }
+    case 'polyline': return { ...node, points: (node as PolylineNode).points.map((p) => ({ x: p.x + dx, y: p.y + dy })) }
+    case 'polygon': return { ...node, points: (node as PolygonNode).points.map((p) => ({ x: p.x + dx, y: p.y + dy })) }
+    case 'star': return { ...node, cx: (node as StarNode).cx + dx, cy: (node as StarNode).cy + dy }
+    case 'text': return { ...node, x: (node as TextNode).x + dx, y: (node as TextNode).y + dy }
+    case 'image': return { ...node, x: (node as ImageNode).x + dx, y: (node as ImageNode).y + dy }
+    default:
+      return { ...node, transform: { ...node.transform, translateX: ((node.transform?.translateX) ?? 0) + dx, translateY: ((node.transform?.translateY) ?? 0) + dy } }
+  }
+}
+
+function reorderChildren(children: SvgNode[], nodeId: string, direction: 'up' | 'down' | 'front' | 'back'): SvgNode[] {
+  const index = children.findIndex((c) => c.id === nodeId)
+  if (index < 0) return children
+  const arr = [...children]
+  const [item] = arr.splice(index, 1)
+  if (direction === 'front') {
+    arr.push(item)
+  } else if (direction === 'back') {
+    arr.unshift(item)
+  } else if (direction === 'up') {
+    arr.splice(Math.min(arr.length, index + 1), 0, item)
+  } else {
+    arr.splice(Math.max(0, index - 1), 0, item)
+  }
+  return arr
+}
+
+function reorderInTree(node: SvgNode, targetId: string, direction: 'up' | 'down' | 'front' | 'back'): SvgNode {
+  if (!node.children?.length) return node
+  if (node.children.some((c) => c.id === targetId)) {
+    return { ...node, children: reorderChildren(node.children, targetId, direction) }
+  }
+  return { ...node, children: node.children.map((child) => reorderInTree(child, targetId, direction)) }
+}
+
+function defaultStyle(): AppearanceModel {
+  return {
+    fill: { kind: 'solid', color: '#4f8ef7' },
+    stroke: { color: '#1d4ed8', width: 2 }
+  }
+}
+
+// ─── Shape creation commands ──────────────────────────────────────────────────
+
+export const addEllipseCommand: EditorCommand<{ cx: number; cy: number; rx: number; ry: number }> = {
+  id: 'document.addEllipse',
+  label: 'Add Ellipse',
+  run: ({ document }, payload) => {
+    const ellipse: EllipseNode = {
+      id: nanoid(),
+      type: 'ellipse',
+      visible: true,
+      locked: false,
+      cx: payload.cx,
+      cy: payload.cy,
+      rx: payload.rx,
+      ry: payload.ry,
+      style: defaultStyle()
+    }
+    return {
+      label: 'Add Ellipse',
+      selectionIds: [ellipse.id],
+      document: { ...document, updatedAt: new Date().toISOString(), root: { ...document.root, children: [...(document.root.children ?? []), ellipse] } }
+    }
+  }
+}
+
+export const addLineCommand: EditorCommand<{ x1: number; y1: number; x2: number; y2: number }> = {
+  id: 'document.addLine',
+  label: 'Add Line',
+  run: ({ document }, payload) => {
+    const line: LineNode = {
+      id: nanoid(),
+      type: 'line',
+      visible: true,
+      locked: false,
+      x1: payload.x1,
+      y1: payload.y1,
+      x2: payload.x2,
+      y2: payload.y2,
+      style: { fill: { kind: 'none' }, stroke: { color: '#1d4ed8', width: 3 } }
+    }
+    return {
+      label: 'Add Line',
+      selectionIds: [line.id],
+      document: { ...document, updatedAt: new Date().toISOString(), root: { ...document.root, children: [...(document.root.children ?? []), line] } }
+    }
+  }
+}
+
+export const addPolygonCommand: EditorCommand<{ cx: number; cy: number; radius: number; sides: number }> = {
+  id: 'document.addPolygon',
+  label: 'Add Polygon',
+  run: ({ document }, payload) => {
+    const { cx, cy, radius, sides } = payload
+    const points: Array<{ x: number; y: number }> = []
+    for (let i = 0; i < sides; i++) {
+      const angle = (Math.PI * 2 * i) / sides - Math.PI / 2
+      points.push({ x: cx + radius * Math.cos(angle), y: cy + radius * Math.sin(angle) })
+    }
+    const polygon: PolygonNode = {
+      id: nanoid(),
+      type: 'polygon',
+      visible: true,
+      locked: false,
+      points,
+      style: defaultStyle()
+    }
+    return {
+      label: 'Add Polygon',
+      selectionIds: [polygon.id],
+      document: { ...document, updatedAt: new Date().toISOString(), root: { ...document.root, children: [...(document.root.children ?? []), polygon] } }
+    }
+  }
+}
+
+export const addStarCommand: EditorCommand<{ cx: number; cy: number; outerRadius: number; innerRadius: number; numPoints: number }> = {
+  id: 'document.addStar',
+  label: 'Add Star',
+  run: ({ document }, payload) => {
+    const star: StarNode = {
+      id: nanoid(),
+      type: 'star',
+      visible: true,
+      locked: false,
+      cx: payload.cx,
+      cy: payload.cy,
+      outerRadius: payload.outerRadius,
+      innerRadius: payload.innerRadius,
+      numPoints: payload.numPoints,
+      style: { fill: { kind: 'solid', color: '#fbbf24' }, stroke: { color: '#b45309', width: 2 } }
+    }
+    return {
+      label: 'Add Star',
+      selectionIds: [star.id],
+      document: { ...document, updatedAt: new Date().toISOString(), root: { ...document.root, children: [...(document.root.children ?? []), star] } }
+    }
+  }
+}
+
+export const addTextCommand: EditorCommand<{ x: number; y: number; content: string }> = {
+  id: 'document.addText',
+  label: 'Add Text',
+  run: ({ document }, payload) => {
+    const text: TextNode = {
+      id: nanoid(),
+      type: 'text',
+      visible: true,
+      locked: false,
+      x: payload.x,
+      y: payload.y,
+      content: payload.content,
+      textStyle: { fontSize: 48, fontFamily: 'sans-serif', fontWeight: 'normal' },
+      style: { fill: { kind: 'solid', color: '#ffffff' }, stroke: { color: 'transparent', width: 0 } }
+    }
+    return {
+      label: 'Add Text',
+      selectionIds: [text.id],
+      document: { ...document, updatedAt: new Date().toISOString(), root: { ...document.root, children: [...(document.root.children ?? []), text] } }
+    }
+  }
+}
+
+// ─── Object action commands ───────────────────────────────────────────────────
+
+export const deleteNodesCommand: EditorCommand<{ nodeIds: string[] }> = {
+  id: 'document.deleteNodes',
+  label: 'Delete',
+  run: ({ document }, { nodeIds }) => {
+    const targetIds = new Set(nodeIds)
+    const nextRoot = removeNodesFromTree(document.root, targetIds)
+    return {
+      label: `Delete ${nodeIds.length === 1 ? 'Object' : 'Objects'}`,
+      selectionIds: [],
+      document: { ...document, updatedAt: new Date().toISOString(), root: nextRoot as typeof document.root }
+    }
+  }
+}
+
+export const duplicateNodesCommand: EditorCommand<{ nodeIds: string[] }> = {
+  id: 'document.duplicateNodes',
+  label: 'Duplicate',
+  run: ({ document }, { nodeIds }) => {
+    const newIds: string[] = []
+    let root = { ...document.root, children: [...(document.root.children ?? [])] }
+
+    for (const nodeId of nodeIds) {
+      const index = root.children.findIndex((c) => c.id === nodeId)
+      if (index < 0) continue
+      const original = root.children[index]
+      const clone = deepCloneWithNewIds(offsetNode(original, 16, 16))
+      newIds.push(clone.id)
+      root = { ...root, children: [...root.children.slice(0, index + 1), clone, ...root.children.slice(index + 1)] }
+    }
+
+    return {
+      label: `Duplicate ${nodeIds.length === 1 ? 'Object' : 'Objects'}`,
+      selectionIds: newIds,
+      document: { ...document, updatedAt: new Date().toISOString(), root }
+    }
+  }
+}
+
+export const reorderNodeCommand: EditorCommand<{ nodeId: string; direction: 'up' | 'down' | 'front' | 'back' }> = {
+  id: 'document.reorderNode',
+  label: 'Reorder',
+  run: ({ document }, { nodeId, direction }) => {
+    const labelMap = { up: 'Move Forward', down: 'Move Backward', front: 'Bring to Front', back: 'Send to Back' }
+    const nextRoot = reorderInTree(document.root, nodeId, direction)
+    return {
+      label: labelMap[direction],
+      selectionIds: [nodeId],
+      document: { ...document, updatedAt: new Date().toISOString(), root: nextRoot as typeof document.root }
+    }
+  }
+}
+
+export const setNodeVisibilityCommand: EditorCommand<{ nodeId: string; visible: boolean }> = {
+  id: 'document.setNodeVisibility',
+  label: 'Set Visibility',
+  run: ({ document }, { nodeId, visible }) => {
+    const nextRoot = updateNodeInTree(document.root, nodeId, (n) => ({ ...n, visible }))
+    return {
+      label: visible ? 'Show Object' : 'Hide Object',
+      selectionIds: [nodeId],
+      document: { ...document, updatedAt: new Date().toISOString(), root: nextRoot as typeof document.root }
+    }
+  }
+}
+
+export const setNodeLockedCommand: EditorCommand<{ nodeId: string; locked: boolean }> = {
+  id: 'document.setNodeLocked',
+  label: 'Set Locked',
+  run: ({ document }, { nodeId, locked }) => {
+    const nextRoot = updateNodeInTree(document.root, nodeId, (n) => ({ ...n, locked }))
+    return {
+      label: locked ? 'Lock Object' : 'Unlock Object',
+      selectionIds: [nodeId],
+      document: { ...document, updatedAt: new Date().toISOString(), root: nextRoot as typeof document.root }
+    }
+  }
+}
+
+export const updateNodeStyleCommand: EditorCommand<{ nodeId: string; style: Partial<AppearanceModel> }> = {
+  id: 'document.updateNodeStyle',
+  label: 'Update Style',
+  run: ({ document }, { nodeId, style }) => {
+    const nextRoot = updateNodeInTree(document.root, nodeId, (n) => {
+      const existing = (n as { style?: AppearanceModel }).style ?? {}
+      return { ...n, style: { ...existing, ...style } }
+    })
+    return {
+      label: 'Update Style',
+      selectionIds: [nodeId],
+      document: { ...document, updatedAt: new Date().toISOString(), root: nextRoot as typeof document.root }
+    }
+  }
+}
+
+export const updateNodePropertiesCommand: EditorCommand<{ nodeId: string; properties: Record<string, unknown> }> = {
+  id: 'document.updateNodeProperties',
+  label: 'Update Properties',
+  run: ({ document }, { nodeId, properties }) => {
+    const nextRoot = updateNodeInTree(document.root, nodeId, (n) => ({ ...n, ...properties }))
+    return {
+      label: 'Update Properties',
+      selectionIds: [nodeId],
+      document: { ...document, updatedAt: new Date().toISOString(), root: nextRoot as typeof document.root }
+    }
+  }
+}
+
+// ─── Style-specific updaters ──────────────────────────────────────────────────
+
+export const updateNodeFillCommand: EditorCommand<{ nodeId: string; color: string }> = {
+  id: 'document.updateNodeFill',
+  label: 'Update Fill',
+  run: ({ document }, { nodeId, color }) => {
+    const nextRoot = updateNodeInTree(document.root, nodeId, (n) => {
+      const existing = (n as { style?: AppearanceModel }).style ?? {}
+      return { ...n, style: { ...existing, fill: { kind: 'solid' as const, color } } }
+    })
+    return {
+      label: 'Update Fill',
+      selectionIds: [nodeId],
+      document: { ...document, updatedAt: new Date().toISOString(), root: nextRoot as typeof document.root }
+    }
+  }
+}
+
+export const updateNodeStrokeCommand: EditorCommand<{ nodeId: string; stroke: StrokeModel }> = {
+  id: 'document.updateNodeStroke',
+  label: 'Update Stroke',
+  run: ({ document }, { nodeId, stroke }) => {
+    const nextRoot = updateNodeInTree(document.root, nodeId, (n) => {
+      const existing = (n as { style?: AppearanceModel }).style ?? {}
+      return { ...n, style: { ...existing, stroke } }
+    })
+    return {
+      label: 'Update Stroke',
+      selectionIds: [nodeId],
+      document: { ...document, updatedAt: new Date().toISOString(), root: nextRoot as typeof document.root }
     }
   }
 }

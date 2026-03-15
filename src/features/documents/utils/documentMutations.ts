@@ -10,6 +10,7 @@ import type {
   PolylineNode,
   RectNode,
   RootNode,
+  StarNode,
   SvgNode,
   TextNode
 } from '@/model/nodes/nodeTypes'
@@ -200,6 +201,10 @@ function moveNode(node: SvgNode, dx: number, dy: number): SvgNode {
       const n = node as PolygonNode
       return { ...n, points: translatePoints(n.points, dx, dy) }
     }
+    case 'star': {
+      const n = node as StarNode
+      return { ...n, cx: n.cx + dx, cy: n.cy + dy }
+    }
     case 'path': {
       const n = node as PathNode
       return { ...n, d: translatePathData(n.d, dx, dy) }
@@ -282,6 +287,19 @@ function resizeNode(node: SvgNode, oldBounds: NodeBounds, targetBounds: NodeBoun
     case 'polygon': {
       const n = node as PolygonNode
       return { ...n, points: scalePoints(n.points, oldBounds, newBounds) }
+    }
+    case 'star': {
+      const n = node as StarNode
+      const scaleW = newBounds.width / Math.max(1, oldBounds.width)
+      const scaleH = newBounds.height / Math.max(1, oldBounds.height)
+      const avgScale = (scaleW + scaleH) / 2
+      return {
+        ...n,
+        cx: newBounds.x + newBounds.width / 2,
+        cy: newBounds.y + newBounds.height / 2,
+        outerRadius: n.outerRadius * avgScale,
+        innerRadius: n.innerRadius * avgScale
+      }
     }
     case 'path': {
       const n = node as PathNode

@@ -7,6 +7,7 @@ export type SvgNodeType =
   | 'line'
   | 'polyline'
   | 'polygon'
+  | 'star'
   | 'path'
   | 'text'
   | 'image'
@@ -142,6 +143,16 @@ export interface PolygonNode extends BaseNode {
   style?: AppearanceModel
 }
 
+export interface StarNode extends BaseNode {
+  type: 'star'
+  cx: number
+  cy: number
+  outerRadius: number
+  innerRadius: number
+  numPoints: number
+  style?: AppearanceModel
+}
+
 export interface PathNode extends BaseNode {
   type: 'path'
   d: string
@@ -175,6 +186,7 @@ export type SvgNode =
   | LineNode
   | PolylineNode
   | PolygonNode
+  | StarNode
   | PathNode
   | TextNode
   | ImageNode

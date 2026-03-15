@@ -4,6 +4,7 @@
  */
 
 import type { NodeBounds } from '@/features/selection/utils/nodeBounds'
+import type { Guide } from '@/model/view/viewTypes'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -25,7 +26,7 @@ export const DEFAULT_SNAP_CONFIG: SnapConfig = {
   angleSnapDegrees: 15
 }
 
-export type SnapType = 'grid' | 'point' | 'bbox'
+export type SnapType = 'grid' | 'point' | 'bbox' | 'guide'
 
 export interface SnapResult {
   x: number
@@ -77,12 +78,14 @@ export function boundsToSnapCandidates(bounds: NodeBounds): SnapCandidate[] {
 
 /**
  * Snap a point to the nearest snap target within threshold (in document space).
+ * Optionally snaps to guide lines (axis-restricted: vertical guides snap x, horizontal snap y).
  */
 export function snapPoint(
   raw: { x: number; y: number },
   candidates: SnapCandidate[],
   config: SnapConfig,
-  threshold: number
+  threshold: number,
+  guides?: Guide[]
 ): SnapResult {
   let bestX = raw.x
   let bestY = raw.y
@@ -112,6 +115,19 @@ export function snapPoint(
       const dy = Math.abs(raw.y - cand.y)
       if (dx < bestDistX) { bestX = cand.x; bestDistX = dx; snappedX = true; snapType = cand.type }
       if (dy < bestDistY) { bestY = cand.y; bestDistY = dy; snappedY = true; snapType = cand.type }
+    }
+  }
+
+  // Guide snap (axis-restricted)
+  if (guides && guides.length > 0) {
+    for (const guide of guides) {
+      if (guide.orientation === 'vertical') {
+        const dx = Math.abs(raw.x - guide.position)
+        if (dx < bestDistX) { bestX = guide.position; bestDistX = dx; snappedX = true; snapType = 'guide' }
+      } else {
+        const dy = Math.abs(raw.y - guide.position)
+        if (dy < bestDistY) { bestY = guide.position; bestDistY = dy; snappedY = true; snapType = 'guide' }
+      }
     }
   }
 

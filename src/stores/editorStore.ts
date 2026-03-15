@@ -5,8 +5,9 @@ import { cloneDocument } from '@/features/documents/utils/documentMutations'
 import { saveDocument } from '@/db/dexie/queries'
 import type { SvgDocument } from '@/model/document/documentTypes'
 import type { SelectionState } from '@/model/selection/selectionTypes'
-import type { ViewState } from '@/model/view/viewTypes'
+import type { ViewState, GuideOrientation } from '@/model/view/viewTypes'
 import type { NodeBounds } from '@/features/selection/utils/nodeBounds'
+import { nanoid } from 'nanoid'
 import { useHistoryStore } from '@/stores/historyStore'
 
 export type EditorMode =
@@ -32,6 +33,7 @@ export interface EditorUiState {
   shapeType: ShapeDrawType
   penPathInProgress: { nodeId: string; startDocument: SvgDocument } | null
   penCursorPoint: { x: number; y: number } | null
+  penDragState: { anchorDocPt: { x: number; y: number }; isDragging: boolean } | null
 }
 
 interface EditorStore {
@@ -62,12 +64,17 @@ interface EditorStore {
   replaceDocument: (doc: SvgDocument) => void
   toggleSnapEnabled: () => void
   toggleGrid: () => void
+  toggleGuides: () => void
+  addGuide: (orientation: GuideOrientation, position: number) => void
+  moveGuide: (id: string, position: number) => void
+  removeGuide: (id: string) => void
   setActivePathPointIds: (ids: string[]) => void
   setIsolationRoot: (id: string | undefined) => void
   setPathEditMode: (nodeId: string | null) => void
   setShapeType: (type: ShapeDrawType) => void
   setPenPathInProgress: (state: EditorUiState['penPathInProgress']) => void
   setPenCursorPoint: (point: { x: number; y: number } | null) => void
+  setPenDragState: (state: EditorUiState['penDragState']) => void
   commitPenPath: () => Promise<void>
   discardPenPath: () => void
 }
@@ -90,6 +97,7 @@ export const useEditorStore = create<EditorStore>()(
       panY: 0,
       showGrid: false,
       showGuides: true,
+      guides: [],
       snapEnabled: true,
       snapConfig: {
         snapToGrid: true,
@@ -110,7 +118,8 @@ export const useEditorStore = create<EditorStore>()(
       inspectorSection: 'quick',
       shapeType: 'rect',
       penPathInProgress: null,
-      penCursorPoint: null
+      penCursorPoint: null,
+      penDragState: null
     },
     setMode: (mode) =>
       set((state) => {
@@ -233,6 +242,23 @@ export const useEditorStore = create<EditorStore>()(
       set((state) => {
         state.view.showGrid = !state.view.showGrid
       }),
+    toggleGuides: () =>
+      set((state) => {
+        state.view.showGuides = !state.view.showGuides
+      }),
+    addGuide: (orientation, position) =>
+      set((state) => {
+        state.view.guides.push({ id: nanoid(8), orientation, position })
+      }),
+    moveGuide: (id, position) =>
+      set((state) => {
+        const guide = state.view.guides.find((g) => g.id === id)
+        if (guide) guide.position = position
+      }),
+    removeGuide: (id) =>
+      set((state) => {
+        state.view.guides = state.view.guides.filter((g) => g.id !== id)
+      }),
     setActivePathPointIds: (ids) =>
       set((state) => {
         state.selection.activePathPointIds = ids
@@ -271,6 +297,10 @@ export const useEditorStore = create<EditorStore>()(
       set((state) => {
         state.ui.penCursorPoint = point
       }),
+    setPenDragState: (penDragState) =>
+      set((state) => {
+        state.ui.penDragState = penDragState
+      }),
     commitPenPath: async () => {
       const { ui, activeDocument } = get()
       const pen = ui.penPathInProgress
@@ -295,6 +325,7 @@ export const useEditorStore = create<EditorStore>()(
         )
         state.ui.penPathInProgress = null
         state.ui.penCursorPoint = null
+        state.ui.penDragState = null
         state.mode = 'select'
         state.selection.selectedNodeIds = []
         state.selection.activeNodeId = undefined

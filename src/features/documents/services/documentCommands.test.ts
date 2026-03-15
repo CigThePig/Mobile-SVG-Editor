@@ -46,8 +46,8 @@ function rootChildren(doc: SvgDocument): SvgNode[] {
   return (doc.root as RootNode).children
 }
 
-function runCommand<T>(command: { run: (ctx: { document: SvgDocument }, payload: T) => { document: SvgDocument; selectionIds?: string[] } }, doc: SvgDocument, payload: T) {
-  return command.run({ document: doc }, payload)
+function runCommand<T>(command: { run: (ctx: { document: SvgDocument }, payload: T) => { document: SvgDocument; selectionIds?: string[] } | Promise<{ document: SvgDocument; selectionIds?: string[] }> }, doc: SvgDocument, payload: T) {
+  return command.run({ document: doc }, payload) as { document: SvgDocument; selectionIds?: string[] }
 }
 
 describe('groupSelectionCommand', () => {

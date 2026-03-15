@@ -161,6 +161,7 @@ export function CanvasOverlayLayer() {
   const lockAspectRatio = useEditorStore((s) => s.ui.lockAspectRatio)
   const penPathInProgress = useEditorStore((s) => s.ui.penPathInProgress)
   const penCursorPoint = useEditorStore((s) => s.ui.penCursorPoint)
+  const penDragState = useEditorStore((s) => s.ui.penDragState)
   const replaceDocument = useEditorStore((s) => s.replaceDocument)
   const pushSnapshot = useHistoryStore((s) => s.pushSnapshot)
   const transformRef = useRef<TransformInteraction>(null)
@@ -171,8 +172,11 @@ export function CanvasOverlayLayer() {
   const lockAspectRatioRef = useRef(lockAspectRatio)
   lockAspectRatioRef.current = lockAspectRatio
 
-  const selectedNodes = selectedNodeIds.map((id) => getNodeById(document.root, id)).filter((node): node is NonNullable<typeof node> => Boolean(node))
-  const selectionBounds = getBoundsForNodes(selectedNodes)
+  const selectedNodes = useMemo(
+    () => selectedNodeIds.map((id) => getNodeById(document.root, id)).filter((node): node is NonNullable<typeof node> => Boolean(node)),
+    [selectedNodeIds, document]
+  )
+  const selectionBounds = useMemo(() => getBoundsForNodes(selectedNodes), [selectedNodes])
   const primaryNode = selectedNodes.length === 1 ? selectedNodes[0] : undefined
   const isMulti = selectedNodeIds.length > 1
 
@@ -301,9 +305,12 @@ export function CanvasOverlayLayer() {
       }
     : null
 
-  const individualBounds = selectedNodes
-    .map((node) => ({ id: node.id, bounds: getNodeBounds(node) }))
-    .filter((item): item is { id: string; bounds: NodeBounds } => Boolean(item.bounds))
+  const individualBounds = useMemo(
+    () => selectedNodes
+      .map((node) => ({ id: node.id, bounds: getNodeBounds(node) }))
+      .filter((item): item is { id: string; bounds: NodeBounds } => Boolean(item.bounds)),
+    [selectedNodes]
+  )
 
   // Snap candidate points: corners/edges/center of non-selected nodes, shown when snap is on
   const snapDots = useMemo(() => {
@@ -426,6 +433,28 @@ export function CanvasOverlayLayer() {
               fill="#60a5fa"
               opacity={0.6}
             />
+            {/* Bezier handle drag preview — shown while dragging after placing an anchor */}
+            {penDragState?.isDragging && lastAnchor && (() => {
+              const h2x = lastAnchor.h2x
+              const h2y = lastAnchor.h2y
+              const h1x = lastAnchor.h1x
+              const h1y = lastAnchor.h1y
+              const r = 5 / view.zoom
+              return (
+                <>
+                  {/* Out-handle line (h2) */}
+                  <line x1={lastAnchor.x} y1={lastAnchor.y} x2={h2x} y2={h2y}
+                    stroke="#f97316" strokeWidth={1.5} strokeDasharray="3 3" vectorEffect="non-scaling-stroke" />
+                  {/* In-handle line (h1) */}
+                  <line x1={lastAnchor.x} y1={lastAnchor.y} x2={h1x} y2={h1y}
+                    stroke="#f97316" strokeWidth={1.5} strokeDasharray="3 3" vectorEffect="non-scaling-stroke" />
+                  {/* Handle circles */}
+                  <circle cx={h2x} cy={h2y} r={r} fill="#f97316" opacity={0.85} />
+                  <circle cx={h1x} cy={h1y} r={r} fill="#f97316" opacity={0.85} />
+                </>
+              )
+            })()}
+
             {/* Close-path indicator on the first anchor (shown when ≥2 anchors placed) */}
             {firstAnchor && subpath.anchors.length >= 2 && (
               <circle

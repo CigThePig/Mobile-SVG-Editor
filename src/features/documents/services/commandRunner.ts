@@ -10,7 +10,7 @@ export async function runCommand<TPayload>(id: string, payload: TPayload) {
 
   const state = useEditorStore.getState()
   const beforeDocument = cloneDocument(state.activeDocument)
-  const result = command.run({ document: beforeDocument }, payload)
+  const result = await command.run({ document: beforeDocument }, payload)
   const afterDocument = cloneDocument(result.document)
   const documentChanged = JSON.stringify(beforeDocument) !== JSON.stringify(afterDocument)
 

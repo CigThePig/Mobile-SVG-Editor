@@ -355,6 +355,7 @@ export function CanvasArtworkLayer() {
   const setIsolationRoot = useEditorStore((s) => s.setIsolationRoot)
   const setPenPathInProgress = useEditorStore((s) => s.setPenPathInProgress)
   const setPenCursorPoint = useEditorStore((s) => s.setPenCursorPoint)
+  const setPenDragState = useEditorStore((s) => s.setPenDragState)
   const commitPenPath = useEditorStore((s) => s.commitPenPath)
   const openInspectorSection = useEditorStore((s) => s.openInspectorSection)
   const setMode = useEditorStore((s) => s.setMode)
@@ -379,6 +380,10 @@ export function CanvasArtworkLayer() {
   // Keep a ref to penPathInProgress for use inside stale closures
   const penPathInProgressRef = useRef(penPathInProgress)
   penPathInProgressRef.current = penPathInProgress
+  // Keep a ref to penDragState for use inside stale closures (same pattern as modeRef)
+  const penDragState = useEditorStore((s) => s.ui.penDragState)
+  const penDragStateRef = useRef(penDragState)
+  penDragStateRef.current = penDragState
 
   const finishInteraction = useCallback(async () => {
     const interaction = interactionRef.current
@@ -434,13 +439,17 @@ export function CanvasArtworkLayer() {
     [document, setMarqueeRect]
   )
 
-  // ── Pen click handler ─────────────────────────────────────────────────────
+  // ── Pen anchor placement ──────────────────────────────────────────────────
+  //
+  // beginPenAnchor: called on pointerdown. Handles close-path detection and
+  // new anchor placement. Sets penDragState so pointermove can update handles.
+  //
+  // finalizePenDrag: called on pointerup. If no meaningful drag occurred,
+  // resets the last anchor to corner mode. Always clears penDragState.
 
-  const handlePenClick = useCallback(async (point: { x: number; y: number }) => {
+  const beginPenAnchor = useCallback(async (point: { x: number; y: number }) => {
     const currentDoc = documentRef.current
     const penState = penPathInProgressRef.current
-
-    // Close threshold: 12 document units (scales with drawing size)
     const closeThreshold = 12 / useEditorStore.getState().view.zoom
 
     if (!penState) {
@@ -468,8 +477,9 @@ export function CanvasArtworkLayer() {
       replaceDocument(nextDoc as typeof currentDoc)
       setPenPathInProgress({ nodeId, startDocument })
       useEditorStore.getState().setSelection([nodeId])
+      setPenDragState({ anchorDocPt: point, isDragging: false })
     } else {
-      // Append anchor to existing path
+      // Existing path — check for close first
       const pathNode = getNodeById(currentDoc.root, penState.nodeId) as PathNode | undefined
       if (!pathNode) return
 
@@ -477,23 +487,19 @@ export function CanvasArtworkLayer() {
       if (!parsed.subpaths[0]) return
 
       const firstAnchor = parsed.subpaths[0].anchors[0]
-
-      // Check if clicking near the first anchor to close the path
       if (firstAnchor && parsed.subpaths[0].anchors.length >= 2) {
         const dist = Math.hypot(point.x - firstAnchor.x, point.y - firstAnchor.y)
         if (dist < closeThreshold) {
-          // Close and commit
           parsed.subpaths[0].closed = true
           const nextD = serializePathD(parsed)
           const nextDoc = updateNodeD(currentDoc, penState.nodeId, nextD)
           replaceDocument(nextDoc)
-          // Commit after updating the document
           await commitPenPath()
           return
         }
       }
 
-      // Append a corner anchor
+      // Append a new corner anchor — drag will update handles via pointermove
       const newAnchor = {
         id: nanoid(8),
         x: point.x,
@@ -508,8 +514,34 @@ export function CanvasArtworkLayer() {
       const nextD = serializePathD(parsed)
       const nextDoc = updateNodeD(currentDoc, penState.nodeId, nextD)
       replaceDocument(nextDoc)
+      setPenDragState({ anchorDocPt: point, isDragging: false })
     }
-  }, [commitPenPath, replaceDocument, setPenPathInProgress])
+  }, [commitPenPath, replaceDocument, setPenPathInProgress, setPenDragState])
+
+  const finalizePenDrag = useCallback(() => {
+    const drag = penDragStateRef.current
+    if (!drag) return
+    if (!drag.isDragging) {
+      // Tap (no meaningful drag): ensure last anchor stays corner mode
+      const penState = penPathInProgressRef.current
+      const currentDoc = documentRef.current
+      if (penState) {
+        const pathNode = getNodeById(currentDoc.root, penState.nodeId) as PathNode | undefined
+        if (pathNode) {
+          const parsed = parsePathD(pathNode.d)
+          const sub = parsed.subpaths[0]
+          if (sub && sub.anchors.length > 0) {
+            const last = sub.anchors[sub.anchors.length - 1]
+            last.h1x = last.x; last.h1y = last.y
+            last.h2x = last.x; last.h2y = last.y
+            last.handleMode = 'corner'
+            replaceDocument(updateNodeD(currentDoc, penState.nodeId, serializePathD(parsed)))
+          }
+        }
+      }
+    }
+    setPenDragState(null)
+  }, [replaceDocument, setPenDragState])
 
   // ── Commit shape draw ─────────────────────────────────────────────────────
 
@@ -654,16 +686,56 @@ export function CanvasArtworkLayer() {
         return
       }
 
-      // Pen mode: track cursor for preview overlay
+      // Pen mode: handle drag (bezier handle creation) and cursor preview
       if (modeRef.current === 'pen') {
         const point = clientPointToDocumentPoint(event.clientX, event.clientY, svg, effectiveViewBoxRef.current)
         useEditorStore.getState().setPenCursorPoint(point)
+
+        const drag = penDragStateRef.current
+        if (drag) {
+          const zoom = useEditorStore.getState().view.zoom
+          const dx = point.x - drag.anchorDocPt.x
+          const dy = point.y - drag.anchorDocPt.y
+          const screenDist = Math.hypot(dx, dy) * zoom
+          if (screenDist > 4) {
+            // Update isDragging flag
+            if (!drag.isDragging) {
+              penDragStateRef.current = { ...drag, isDragging: true }
+              useEditorStore.getState().setPenDragState({ ...drag, isDragging: true })
+            }
+            // Compute symmetric handles on the last placed anchor
+            const penState = penPathInProgressRef.current
+            const currentDoc = documentRef.current
+            if (penState) {
+              const pathNode = getNodeById(currentDoc.root, penState.nodeId) as PathNode | undefined
+              if (pathNode) {
+                const parsed = parsePathD(pathNode.d)
+                const sub = parsed.subpaths[0]
+                if (sub && sub.anchors.length > 0) {
+                  const last = sub.anchors[sub.anchors.length - 1]
+                  // h2 points toward drag direction, h1 is mirror
+                  last.h2x = drag.anchorDocPt.x + dx
+                  last.h2y = drag.anchorDocPt.y + dy
+                  last.h1x = drag.anchorDocPt.x - dx
+                  last.h1y = drag.anchorDocPt.y - dy
+                  last.handleMode = 'symmetric'
+                  replaceDocument(updateNodeD(currentDoc, penState.nodeId, serializePathD(parsed)))
+                }
+              }
+            }
+          }
+        }
       }
     }
 
     const handlePointerUp = (event: PointerEvent) => {
       activePointersRef.current.delete(event.pointerId)
       if (activePointersRef.current.size < 2) pinchRef.current = null
+
+      // Finalize pen drag (bezier handles or revert to corner)
+      if (modeRef.current === 'pen') {
+        finalizePenDrag()
+      }
 
       const interaction = interactionRef.current
 
@@ -711,7 +783,7 @@ export function CanvasArtworkLayer() {
       window.removeEventListener('pointerup', handlePointerUp)
       window.removeEventListener('pointercancel', handlePointerUp)
     }
-  }, [commitShapeDraw, finishInteraction, maybeBeginPinch, replaceDocument, setPan, setMarqueeRect, setSelection, clearSelection])
+  }, [commitShapeDraw, finishInteraction, finalizePenDrag, maybeBeginPinch, replaceDocument, setPan, setMarqueeRect, setSelection, clearSelection])
 
   const handleNodePointerDown = (event: ReactPointerEvent<SVGElement>, id: string) => {
     const svg = svgRef.current
@@ -875,7 +947,7 @@ export function CanvasArtworkLayer() {
 
     if (mode === 'pen') {
       const point = clientPointToDocumentPoint(event.clientX, event.clientY, svg, effectiveViewBox)
-      await handlePenClick(point)
+      await beginPenAnchor(point)
       return
     }
 

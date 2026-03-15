@@ -61,6 +61,7 @@ interface EditorStore {
   openInspectorSection: (section: EditorUiState['inspectorSection']) => void
   replaceDocument: (doc: SvgDocument) => void
   toggleSnapEnabled: () => void
+  toggleGrid: () => void
   setActivePathPointIds: (ids: string[]) => void
   setIsolationRoot: (id: string | undefined) => void
   setPathEditMode: (nodeId: string | null) => void
@@ -227,6 +228,10 @@ export const useEditorStore = create<EditorStore>()(
     toggleSnapEnabled: () =>
       set((state) => {
         state.view.snapEnabled = !state.view.snapEnabled
+      }),
+    toggleGrid: () =>
+      set((state) => {
+        state.view.showGrid = !state.view.showGrid
       }),
     setActivePathPointIds: (ids) =>
       set((state) => {

@@ -4,7 +4,8 @@ import { getEffectiveViewBox, clientPointToDocumentPoint } from '@/features/canv
 import { cloneDocument, getNodeById, resizeNodeInDocument, resizeNodesInDocument, rotateNodeInDocument, rotateNodesInDocument } from '@/features/documents/utils/documentMutations'
 import type { SvgDocument } from '@/model/document/documentTypes'
 import type { PathNode } from '@/model/nodes/nodeTypes'
-import { getNodeBounds, getBoundsForNodes, normalizeBounds, type NodeBounds } from '@/features/selection/utils/nodeBounds'
+import { getNodeBounds, getBoundsForNodes, collectSelectableNodes, normalizeBounds, type NodeBounds } from '@/features/selection/utils/nodeBounds'
+import { boundsToSnapCandidates } from '@/features/path/utils/snapUtils'
 import { saveDocument } from '@/db/dexie/queries'
 import { useEditorStore } from '@/stores/editorStore'
 import { useHistoryStore } from '@/stores/historyStore'
@@ -304,6 +305,23 @@ export function CanvasOverlayLayer() {
     .map((node) => ({ id: node.id, bounds: getNodeBounds(node) }))
     .filter((item): item is { id: string; bounds: NodeBounds } => Boolean(item.bounds))
 
+  // Snap candidate points: corners/edges/center of non-selected nodes, shown when snap is on
+  const snapDots = useMemo(() => {
+    if (!view.snapEnabled || (mode !== 'select' && mode !== 'shape')) return []
+    const allNodes = collectSelectableNodes(document.root)
+    const nonSelected = allNodes.filter((n) => !selectedNodeIds.includes(n.id))
+    const dots: Array<{ key: string; x: number; y: number }> = []
+    for (const node of nonSelected) {
+      const bounds = getNodeBounds(node)
+      if (bounds) {
+        for (const c of boundsToSnapCandidates(bounds)) {
+          dots.push({ key: `${node.id}-${c.x}-${c.y}`, x: c.x, y: c.y })
+        }
+      }
+    }
+    return dots
+  }, [document, selectedNodeIds, view.snapEnabled, mode])
+
   // Selection box appearance varies: single = solid bright, multi individual = lighter dashed
   const singleStrokeColor = '#60a5fa'
   const multiIndividualStrokeColor = 'rgba(96,165,250,0.5)'
@@ -317,6 +335,19 @@ export function CanvasOverlayLayer() {
       viewBox={`${effectiveViewBox.x} ${effectiveViewBox.y} ${effectiveViewBox.width} ${effectiveViewBox.height}`}
       style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}
     >
+      {/* Snap candidate indicators — shown when snap is enabled in select/shape mode */}
+      {snapDots.map(({ key, x, y }) => (
+        <circle
+          key={key}
+          cx={x}
+          cy={y}
+          r={3 / view.zoom}
+          fill="#818cf8"
+          opacity={0.35}
+          style={{ pointerEvents: 'none' }}
+        />
+      ))}
+
       {/* Individual selection boxes */}
       {individualBounds.map(({ id, bounds }) => (
         <rect

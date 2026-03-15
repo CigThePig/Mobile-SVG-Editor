@@ -3,6 +3,8 @@ import { nanoid } from 'nanoid'
 import type { SvgDocument } from '@/model/document/documentTypes'
 import type { HistoryEntry } from '@/model/history/historyTypes'
 
+const MAX_HISTORY_SIZE = 50
+
 interface HistoryStore {
   undoStack: HistoryEntry[]
   redoStack: HistoryEntry[]
@@ -29,7 +31,7 @@ export const useHistoryStore = create<HistoryStore>((set, get) => ({
           afterDocument,
           transactionId
         }
-      ],
+      ].slice(-MAX_HISTORY_SIZE),
       redoStack: []
     })),
   undo: () => {

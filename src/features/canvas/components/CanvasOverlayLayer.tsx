@@ -239,6 +239,7 @@ export function CanvasOverlayLayer() {
 
   const startResize = (event: ReactPointerEvent<SVGCircleElement>, handle: ResizeHandlePosition) => {
     if (!selectionBounds || mode !== 'select') return
+    if (selectedNodes.some((n) => n.locked)) return
     event.stopPropagation()
     transformRef.current = {
       kind: 'resize',
@@ -252,6 +253,7 @@ export function CanvasOverlayLayer() {
 
   const startRotate = (event: ReactPointerEvent<SVGCircleElement>) => {
     if (!selectionBounds || mode !== 'select' || !svgRef.current) return
+    if (selectedNodes.some((n) => n.locked)) return
     event.stopPropagation()
     const center = { x: selectionBounds.x + selectionBounds.width / 2, y: selectionBounds.y + selectionBounds.height / 2 }
     const point = clientPointToDocumentPoint(event.clientX, event.clientY, svgRef.current, effectiveViewBox)

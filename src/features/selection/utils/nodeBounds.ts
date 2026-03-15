@@ -306,5 +306,5 @@ export function boundsIntersect(a: NodeBounds, b: NodeBounds): boolean {
 }
 
 export function collectSelectableNodes(root: SvgNode): SvgNode[] {
-  return root.children ?? []
+  return (root.children ?? []).filter((n) => n.visible !== false && !n.locked)
 }

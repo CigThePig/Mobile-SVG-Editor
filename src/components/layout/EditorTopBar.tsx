@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { ArrowLeft, FilePlus, Undo2, Redo2, ZoomIn, ZoomOut, Save, Layers, SlidersHorizontal, ImagePlus, Download, History } from 'lucide-react'
+import { ArrowLeft, FilePlus, Undo2, Redo2, ZoomIn, ZoomOut, Save, Layers, SlidersHorizontal, ImagePlus, Download, History, Settings } from 'lucide-react'
 import { createAndSaveDocument, saveDocument } from '@/db/dexie/queries'
 import { useEditorStore } from '@/stores/editorStore'
 import { useHistoryStore } from '@/stores/historyStore'
@@ -234,6 +234,9 @@ export function EditorTopBar() {
         </button>
         <button onClick={() => void handleSave()} style={iconBtn()} aria-label="Save">
           <Save size={20} />
+        </button>
+        <button onClick={() => navigate('settings')} style={iconBtn()} aria-label="Settings">
+          <Settings size={20} />
         </button>
         <SnapshotsSheet open={snapshotsOpen} onOpenChange={setSnapshotsOpen} />
       </div>

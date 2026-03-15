@@ -281,22 +281,27 @@ Goal: keep the editor usable as complexity rises.
 - ✓ Snap candidate indicators — subtle dots at corners, edges, and centers of non-selected nodes are shown on canvas whenever snap is enabled in select/shape mode
 - ✓ Canvas UI overlay — bottom-right overlay now shows live zoom %, a grid toggle button, and a snap toggle button with visual on/off states
 
-### Phase 7: further polish and capability expansion
+### Phase 7: further polish and capability expansion ✓ COMPLETE
 
 Goal: close remaining gaps in editing fidelity and export quality.
 
-- Pen mode bezier handle drag during anchor placement
-- Boolean operations that preserve curves (not just sampled polygons)
-- Guides: horizontal/vertical draggable guide lines with snap-to-guide
-- Performance profiling pass on large documents (canvas render, bounds computation, clone cost)
-- Settings and Inspect placeholder pages wired with real functionality
+- ✓ Pen mode bezier handle drag — click-drag after placing an anchor sets symmetric bezier handles (h1/h2); tap-only still produces a corner anchor. Handle drag preview shown in orange on the canvas overlay.
+- ✓ Curve-preserving boolean operations — Paper.js (dynamic import) replaces the polygon-clipping fallback as the primary boolean op engine; output now contains C (cubic bezier) segments rather than L-only polygons. Polygon-clipping is kept as an automatic fallback if Paper.js throws.
+- ✓ Guides — horizontal and vertical draggable guide lines stored in view state; rendered via a new `CanvasGuidesLayer` (orange lines); draggable to reposition, drag off-canvas to delete; `+H`/`+V` add-guide buttons and a Guides visibility toggle added to the canvas UI overlay; snap-to-guide integrated into `snapUtils.snapPoint` (axis-restricted).
+- ✓ Performance memoization — `selectedNodes`, `selectionBounds`, and `individualBounds` in `CanvasOverlayLayer` are now memoized with `useMemo`; grid line arrays in `CanvasGridLayer` are also memoized, preventing recomputation during drags that do not change selection or viewport.
+- ✓ Settings page — real settings UI with snap/grid configuration, view toggles, export scale, and a destructive "clear all documents" action; backed by a persisted `settingsStore` (Zustand + localStorage). Accessible via the ⚙ button in the editor top bar.
+- ✓ Inspect page — read-only property viewer showing the selected node's type, geometry, transform, computed bounds, and (for path nodes) the raw `d` string with a copy button. Accessible via router navigation.
 
-### Known open issues
+### Phase 8: open issues and future work
 
-- Pen mode is corner-only (no bezier handle drag while placing). Refine in path edit mode after committing.
-- Boolean operations flatten curves to sampled polygons (adaptive sampling via bezier-js now in place, but output is still polygon-only).
-- Settings and Inspect pages remain as placeholders.
-- No draggable guide lines yet (grid overlay is now present; guide lines are a separate feature).
+- **Paper.js bundle size** — the lazy-loaded Paper.js chunk is ~360 KB (gzipped ~123 KB). The first boolean operation triggers a network fetch. Phase 8 should evaluate a WASM-based alternative (e.g. `@jscad/csg`) or offload Paper.js to a Web Worker to avoid blocking the main thread.
+- **Pen handle drag + snap** — bezier handles set during pen anchor drag are not yet snapped to grid or guide positions. Phase 8 should thread `snapPoint` into the pen drag move handler so handles land on exact grid/guide coordinates.
+- **Guide persistence** — guides live in `ViewState` (in-memory only) and are lost on page reload. Phase 8 should decide whether guides persist per-document (stored in `SvgDocument.editorState`) or globally (in `settingsStore`).
+- **Ruler drag-to-create guides** — the current approach uses `+H`/`+V` buttons. A drag-from-ruler strip (8 px margin at the top/left of the canvas) would be more ergonomic on desktop and match Figma/Sketch convention. Phase 8 should add ruler strips to `CanvasViewport`.
+- **Paper.js subtract chain semantics** — for 3+ nodes, subtract is implemented as a left-associative chain (`((A − B) − C)`). In some cases "first minus union-of-rest" is more intuitive. Phase 8 should let the user choose or standardize the behavior.
+- **Settings not synced to IndexedDB** — `settingsStore` persists to `localStorage` (device-local). Phase 8 should decide whether settings should live alongside documents in Dexie for cross-browser sync.
+- **Outline mode not wired to canvas** — `ViewState.outlineMode` is stored and toggled in settings but has no effect on `CanvasArtworkLayer` rendering. Phase 8 should wire it: when `outlineMode` is true, render all shapes as stroke-only with no fill.
+- **Dead code in CanvasArtworkLayer** — `void points` at line ~562 (polygon command handler) is unreachable dead code. Phase 8 should clean it up.
 
 ## Current run commands
 

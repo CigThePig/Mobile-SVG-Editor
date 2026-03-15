@@ -13,5 +13,5 @@ export interface CommandResult {
 export interface EditorCommand<TPayload = unknown> {
   id: string
   label: string
-  run: (ctx: CommandContext, payload: TPayload) => CommandResult
+  run: (ctx: CommandContext, payload: TPayload) => CommandResult | Promise<CommandResult>
 }

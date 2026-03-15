@@ -262,7 +262,7 @@ function makeBooleanCommand(op: BooleanOpType): EditorCommand<{ nodeIds: string[
   return {
     id: `path.boolean${label}`,
     label: `Boolean ${label}`,
-    run: ({ document }, { nodeIds }) => {
+    run: async ({ document }, { nodeIds }) => {
       if (nodeIds.length < 2) {
         return { label: `Boolean ${label}`, document }
       }
@@ -274,7 +274,7 @@ function makeBooleanCommand(op: BooleanOpType): EditorCommand<{ nodeIds: string[
 
       let resultNode: PathNode
       try {
-        resultNode = performBooleanOp(nodes, op)
+        resultNode = await performBooleanOp(nodes, op)
       } catch (e) {
         if (e instanceof BooleanOpError) {
           console.warn(`Boolean op failed: ${e.message}`)

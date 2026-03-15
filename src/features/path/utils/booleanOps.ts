@@ -1,12 +1,13 @@
 /**
  * Boolean shape operations (union, subtract, intersect, exclude).
- * Uses the polygon-clipping library which expects polygon ring coordinates.
+ *
+ * Primary path: Paper.js (curve-preserving, async dynamic import).
+ * Fallback: polygon-clipping (polygon approximation, synchronous).
  *
  * Limitations:
  * - Only works on filled closed paths. Open paths or non-closed shapes
  *   will throw a BooleanOpError.
  * - Stroke geometry is ignored (only fill area is considered).
- * - Arc / curve geometry is approximated by flattening to polygon segments.
  * - Groups in selection are not supported.
  */
 
@@ -155,18 +156,72 @@ function getPathDataFromNode(node: SvgNode): string {
 
 export type BooleanOpType = 'union' | 'subtract' | 'intersect' | 'exclude'
 
-/**
- * Perform a boolean operation on 2+ nodes.
- * Returns a new PathNode (not inserted into document — caller handles that).
- *
- * For subtract: first node is the "base", rest are subtracted from it.
- * For union/intersect/exclude: all nodes are treated symmetrically.
- */
-export function performBooleanOp(nodes: SvgNode[], op: BooleanOpType): PathNode {
-  if (nodes.length < 2) {
-    throw new BooleanOpError('Boolean operations require at least 2 shapes')
+// ── Paper.js lazy loader ──────────────────────────────────────────────────────
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let paperInstance: any = null
+
+async function getPaper() {
+  if (paperInstance) return paperInstance
+  const mod = await import('paper')
+  const paper = mod.default ?? mod
+  // Paper.js requires a canvas to initialise its internal scope
+  const canvas = document.createElement('canvas')
+  canvas.width = 1
+  canvas.height = 1
+  paper.setup(canvas)
+  paperInstance = paper
+  return paper
+}
+
+// ── Paper.js curve-preserving boolean op ─────────────────────────────────────
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function applyPaperBoolOp(pathA: any, pathB: any, op: BooleanOpType, paper: any): any {
+  switch (op) {
+    case 'union':    return pathA.unite(pathB)
+    case 'subtract': return pathA.subtract(pathB)
+    case 'intersect':return pathA.intersect(pathB)
+    case 'exclude':  return pathA.exclude(pathB)
+  }
+}
+
+async function performBooleanOpPaper(nodes: SvgNode[], op: BooleanOpType): Promise<PathNode> {
+  const paper = await getPaper()
+  const pathStrings = nodes.map((n) => getPathDataFromNode(n))
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const paperPaths: any[] = pathStrings.map((d) => new paper.Path({ pathData: d }))
+
+  let result = paperPaths[0]
+  for (let i = 1; i < paperPaths.length; i++) {
+    const next = applyPaperBoolOp(result, paperPaths[i], op, paper)
+    if (result !== paperPaths[0]) result.remove()
+    result = next
   }
 
+  // Clean up inputs
+  paperPaths.forEach((p) => p.remove())
+
+  const resultD: string = result.pathData
+  result.remove()
+
+  if (!resultD) throw new BooleanOpError('Paper.js boolean operation produced empty path')
+
+  const primaryStyle = (nodes[0] as { style?: AppearanceModel }).style
+  return {
+    id: nanoid(),
+    type: 'path',
+    name: `${op.charAt(0).toUpperCase() + op.slice(1)} Path`,
+    visible: true,
+    locked: false,
+    d: resultD,
+    style: primaryStyle ? { ...primaryStyle } : undefined
+  }
+}
+
+// ── Polygon fallback ──────────────────────────────────────────────────────────
+
+function performBooleanOpPolygon(nodes: SvgNode[], op: BooleanOpType): PathNode {
   const primaryNode = nodes[0]
   const polygons: Polygon[] = nodes.map((n) => {
     const d = getPathDataFromNode(n)
@@ -202,7 +257,7 @@ export function performBooleanOp(nodes: SvgNode[], op: BooleanOpType): PathNode 
   const d = multiPolygonToPathD(result)
   const primaryStyle = (primaryNode as { style?: AppearanceModel }).style
 
-  const resultNode: PathNode = {
+  return {
     id: nanoid(),
     type: 'path',
     name: `${op.charAt(0).toUpperCase() + op.slice(1)} Path`,
@@ -211,6 +266,30 @@ export function performBooleanOp(nodes: SvgNode[], op: BooleanOpType): PathNode 
     d,
     style: primaryStyle ? { ...primaryStyle } : undefined
   }
+}
 
-  return resultNode
+// ── Public API ────────────────────────────────────────────────────────────────
+
+/**
+ * Perform a boolean operation on 2+ nodes.
+ * Returns a new PathNode (not inserted into document — caller handles that).
+ *
+ * Uses Paper.js for curve-preserving output; falls back to polygon-clipping
+ * if Paper.js is unavailable or throws.
+ *
+ * For subtract: first node is the "base", rest are subtracted from it.
+ * For union/intersect/exclude: all nodes are treated symmetrically.
+ */
+export async function performBooleanOp(nodes: SvgNode[], op: BooleanOpType): Promise<PathNode> {
+  if (nodes.length < 2) {
+    throw new BooleanOpError('Boolean operations require at least 2 shapes')
+  }
+
+  try {
+    return await performBooleanOpPaper(nodes, op)
+  } catch (e) {
+    if (e instanceof BooleanOpError) throw e
+    console.warn('Paper.js boolean op failed, falling back to polygon approximation:', e)
+    return performBooleanOpPolygon(nodes, op)
+  }
 }

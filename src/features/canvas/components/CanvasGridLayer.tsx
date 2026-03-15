@@ -8,25 +8,25 @@ export function CanvasGridLayer() {
 
   const effectiveViewBox = useMemo(() => getEffectiveViewBox(document, view), [document, view])
 
-  if (!view.showGrid) return null
-
   const gridSize = Math.max(1, view.snapConfig.gridSize)
   const { x, y, width, height } = effectiveViewBox
 
-  const startX = Math.floor(x / gridSize) * gridSize
-  const endX = Math.ceil((x + width) / gridSize) * gridSize
-  const startY = Math.floor(y / gridSize) * gridSize
-  const endY = Math.ceil((y + height) / gridSize) * gridSize
+  const { verticalLines, horizontalLines } = useMemo(() => {
+    const startX = Math.floor(x / gridSize) * gridSize
+    const endX = Math.ceil((x + width) / gridSize) * gridSize
+    const startY = Math.floor(y / gridSize) * gridSize
+    const endY = Math.ceil((y + height) / gridSize) * gridSize
 
-  const verticalLines: number[] = []
-  for (let vx = startX; vx <= endX; vx += gridSize) {
-    verticalLines.push(vx)
-  }
+    const vLines: number[] = []
+    for (let vx = startX; vx <= endX; vx += gridSize) vLines.push(vx)
 
-  const horizontalLines: number[] = []
-  for (let hy = startY; hy <= endY; hy += gridSize) {
-    horizontalLines.push(hy)
-  }
+    const hLines: number[] = []
+    for (let hy = startY; hy <= endY; hy += gridSize) hLines.push(hy)
+
+    return { verticalLines: vLines, horizontalLines: hLines }
+  }, [x, y, width, height, gridSize])
+
+  if (!view.showGrid) return null
 
   return (
     <svg

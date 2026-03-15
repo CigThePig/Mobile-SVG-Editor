@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { PointerEvent as ReactPointerEvent, ReactNode, WheelEvent as ReactWheelEvent } from 'react'
+import { nanoid } from 'nanoid'
 import type { SvgDocument } from '@/model/document/documentTypes'
 import type {
   CircleNode,
@@ -20,6 +21,8 @@ import { boundsIntersect, collectSelectableNodes, getNodeBounds, normalizeBounds
 import { saveDocument } from '@/db/dexie/queries'
 import { useEditorStore } from '@/stores/editorStore'
 import { useHistoryStore } from '@/stores/historyStore'
+import { runCommand } from '@/features/documents/services/commandRunner'
+import { parsePathD, serializePathD } from '@/features/path/utils/pathGeometry'
 
 function fillFromNode(node: { style?: { fill?: { kind: string; color?: string } } }) {
   if (!node.style?.fill) return 'transparent'
@@ -184,6 +187,12 @@ type InteractionState =
       append: boolean
       moved: boolean
     }
+  | {
+      kind: 'shape-draw'
+      originDoc: { x: number; y: number }
+      currentDoc: { x: number; y: number }
+      shapeType: string
+    }
   | null
 
 type PinchState = {
@@ -243,12 +252,83 @@ function isDescendantOfSelectedGroup(root: SvgNode, ancestorIds: string[], desce
   return false
 }
 
+/**
+ * Build a polygon-points string for a regular polygon given center and radius.
+ */
+function buildPolygonPoints(cx: number, cy: number, radius: number, sides: number): Array<{ x: number; y: number }> {
+  const pts: Array<{ x: number; y: number }> = []
+  for (let i = 0; i < sides; i++) {
+    const angle = (Math.PI * 2 * i) / sides - Math.PI / 2
+    pts.push({ x: cx + radius * Math.cos(angle), y: cy + radius * Math.sin(angle) })
+  }
+  return pts
+}
+
+// ── Shape draw ghost renderer ─────────────────────────────────────────────────
+
+interface ShapeDrawGhostProps {
+  shapeType: string
+  origin: { x: number; y: number }
+  current: { x: number; y: number }
+}
+
+function ShapeDrawGhost({ shapeType, origin, current }: ShapeDrawGhostProps) {
+  const ghostProps = {
+    fill: 'rgba(96,165,250,0.12)',
+    stroke: '#60a5fa',
+    strokeWidth: 1.5,
+    strokeDasharray: '6 4',
+    vectorEffect: 'non-scaling-stroke' as const,
+    style: { pointerEvents: 'none' as const }
+  }
+
+  const bounds = normalizeBounds({
+    x: origin.x,
+    y: origin.y,
+    width: current.x - origin.x,
+    height: current.y - origin.y
+  })
+
+  switch (shapeType) {
+    case 'rect':
+      return <rect x={bounds.x} y={bounds.y} width={bounds.width} height={bounds.height} {...ghostProps} />
+    case 'ellipse': {
+      const rx = bounds.width / 2
+      const ry = bounds.height / 2
+      return <ellipse cx={bounds.x + rx} cy={bounds.y + ry} rx={rx} ry={ry} {...ghostProps} />
+    }
+    case 'line':
+      return (
+        <line
+          x1={origin.x} y1={origin.y}
+          x2={current.x} y2={current.y}
+          stroke="#60a5fa"
+          strokeWidth={1.5}
+          strokeDasharray="6 4"
+          vectorEffect="non-scaling-stroke"
+          style={{ pointerEvents: 'none' }}
+        />
+      )
+    case 'polygon':
+    case 'star': {
+      // Ghost as bounding rect for complex shapes
+      return <rect x={bounds.x} y={bounds.y} width={bounds.width} height={bounds.height} {...ghostProps} />
+    }
+    default:
+      return null
+  }
+}
+
+// ── Main component ────────────────────────────────────────────────────────────
+
 export function CanvasArtworkLayer() {
   const document = useEditorStore((s) => s.activeDocument)
   const view = useEditorStore((s) => s.view)
   const mode = useEditorStore((s) => s.mode)
   const selectedIds = useEditorStore((s) => s.selection.selectedNodeIds)
   const multiSelectEnabled = useEditorStore((s) => s.ui.multiSelectEnabled)
+  const shapeType = useEditorStore((s) => s.ui.shapeType)
+  const penPathInProgress = useEditorStore((s) => s.ui.penPathInProgress)
   const setSelection = useEditorStore((s) => s.setSelection)
   const clearSelection = useEditorStore((s) => s.clearSelection)
   const setPan = useEditorStore((s) => s.setPan)
@@ -256,6 +336,14 @@ export function CanvasArtworkLayer() {
   const replaceDocument = useEditorStore((s) => s.replaceDocument)
   const pushSnapshot = useHistoryStore((s) => s.pushSnapshot)
   const setPathEditMode = useEditorStore((s) => s.setPathEditMode)
+  const setPenPathInProgress = useEditorStore((s) => s.setPenPathInProgress)
+  const setPenCursorPoint = useEditorStore((s) => s.setPenCursorPoint)
+  const commitPenPath = useEditorStore((s) => s.commitPenPath)
+  const openInspectorSection = useEditorStore((s) => s.openInspectorSection)
+  const setMode = useEditorStore((s) => s.setMode)
+
+  const [shapePreviewCurrent, setShapePreviewCurrent] = useState<{ x: number; y: number } | null>(null)
+
   const lastTapRef = useRef<{ id: string; time: number } | null>(null)
   const svgRef = useRef<SVGSVGElement | null>(null)
   const interactionRef = useRef<InteractionState>(null)
@@ -266,6 +354,12 @@ export function CanvasArtworkLayer() {
   effectiveViewBoxRef.current = effectiveViewBox
   const documentRef = useRef(document)
   documentRef.current = document
+  // Keep a ref to mode so it can be read inside stale window-event closures
+  const modeRef = useRef(mode)
+  modeRef.current = mode
+  // Keep a ref to penPathInProgress for use inside stale closures
+  const penPathInProgressRef = useRef(penPathInProgress)
+  penPathInProgressRef.current = penPathInProgress
 
   const finishInteraction = useCallback(async () => {
     const interaction = interactionRef.current
@@ -321,6 +415,153 @@ export function CanvasArtworkLayer() {
     [document, setMarqueeRect]
   )
 
+  // ── Pen click handler ─────────────────────────────────────────────────────
+
+  const handlePenClick = useCallback(async (point: { x: number; y: number }) => {
+    const currentDoc = documentRef.current
+    const penState = penPathInProgressRef.current
+
+    // Close threshold: 12 document units (scales with drawing size)
+    const closeThreshold = 12 / useEditorStore.getState().view.zoom
+
+    if (!penState) {
+      // Start a new in-progress path
+      const nodeId = nanoid()
+      const startDocument = cloneDocument(currentDoc)
+      const newPathNode = {
+        id: nodeId,
+        type: 'path' as const,
+        visible: true,
+        locked: false,
+        d: `M ${point.x} ${point.y}`,
+        style: {
+          fill: { kind: 'solid' as const, color: '#4f8ef7' },
+          stroke: { color: '#1d4ed8', width: 2 }
+        }
+      }
+      const nextDoc = {
+        ...currentDoc,
+        root: {
+          ...currentDoc.root,
+          children: [...(currentDoc.root.children ?? []), newPathNode]
+        }
+      }
+      replaceDocument(nextDoc as typeof currentDoc)
+      setPenPathInProgress({ nodeId, startDocument })
+      useEditorStore.getState().setSelection([nodeId])
+    } else {
+      // Append anchor to existing path
+      const pathNode = getNodeById(currentDoc.root, penState.nodeId) as PathNode | undefined
+      if (!pathNode) return
+
+      const parsed = parsePathD(pathNode.d)
+      if (!parsed.subpaths[0]) return
+
+      const firstAnchor = parsed.subpaths[0].anchors[0]
+
+      // Check if clicking near the first anchor to close the path
+      if (firstAnchor && parsed.subpaths[0].anchors.length >= 2) {
+        const dist = Math.hypot(point.x - firstAnchor.x, point.y - firstAnchor.y)
+        if (dist < closeThreshold) {
+          // Close and commit
+          parsed.subpaths[0].closed = true
+          const nextD = serializePathD(parsed)
+          const nextDoc = updateNodeD(currentDoc, penState.nodeId, nextD)
+          replaceDocument(nextDoc)
+          // Commit after updating the document
+          await commitPenPath()
+          return
+        }
+      }
+
+      // Append a corner anchor
+      const newAnchor = {
+        id: nanoid(8),
+        x: point.x,
+        y: point.y,
+        h1x: point.x,
+        h1y: point.y,
+        h2x: point.x,
+        h2y: point.y,
+        handleMode: 'corner' as const
+      }
+      parsed.subpaths[0].anchors.push(newAnchor)
+      const nextD = serializePathD(parsed)
+      const nextDoc = updateNodeD(currentDoc, penState.nodeId, nextD)
+      replaceDocument(nextDoc)
+    }
+  }, [commitPenPath, replaceDocument, setPenPathInProgress])
+
+  // ── Commit shape draw ─────────────────────────────────────────────────────
+
+  const commitShapeDraw = useCallback(async (
+    shapeDrawType: string,
+    originDoc: { x: number; y: number },
+    currentDoc: { x: number; y: number }
+  ) => {
+    const bounds = normalizeBounds({
+      x: originDoc.x,
+      y: originDoc.y,
+      width: currentDoc.x - originDoc.x,
+      height: currentDoc.y - originDoc.y
+    })
+
+    if (bounds.width < 2 && bounds.height < 2) return
+
+    switch (shapeDrawType) {
+      case 'rect':
+        await runCommand('document.addRect', {
+          x: Math.round(bounds.x),
+          y: Math.round(bounds.y),
+          width: Math.round(bounds.width),
+          height: Math.round(bounds.height)
+        })
+        break
+      case 'ellipse':
+        await runCommand('document.addEllipse', {
+          cx: Math.round(bounds.x + bounds.width / 2),
+          cy: Math.round(bounds.y + bounds.height / 2),
+          rx: Math.round(bounds.width / 2),
+          ry: Math.round(bounds.height / 2)
+        })
+        break
+      case 'line':
+        await runCommand('document.addLine', {
+          x1: Math.round(originDoc.x),
+          y1: Math.round(originDoc.y),
+          x2: Math.round(currentDoc.x),
+          y2: Math.round(currentDoc.y)
+        })
+        break
+      case 'polygon': {
+        const cx = Math.round(bounds.x + bounds.width / 2)
+        const cy = Math.round(bounds.y + bounds.height / 2)
+        const radius = Math.round(Math.min(bounds.width, bounds.height) / 2)
+        const sides = 6
+        const points = buildPolygonPoints(cx, cy, radius, sides)
+        await runCommand('document.addPolygon', { cx, cy, radius, sides })
+        void points // computed above but runCommand handles generation
+        break
+      }
+      case 'star': {
+        const cx = Math.round(bounds.x + bounds.width / 2)
+        const cy = Math.round(bounds.y + bounds.height / 2)
+        const outerRadius = Math.round(Math.min(bounds.width, bounds.height) / 2)
+        await runCommand('document.addStar', {
+          cx,
+          cy,
+          outerRadius,
+          innerRadius: Math.round(outerRadius * 0.45),
+          numPoints: 5
+        })
+        break
+      }
+    }
+
+    // Auto-return to select mode after drawing a shape
+    setMode('select')
+  }, [setMode])
+
   useEffect(() => {
     const handlePointerMove = (event: PointerEvent) => {
       if (activePointersRef.current.has(event.pointerId)) {
@@ -345,9 +586,16 @@ export function CanvasArtworkLayer() {
       }
 
       const interaction = interactionRef.current
-      if (!interaction) return
 
-      if (interaction.kind === 'drag-selection') {
+      // Shape draw: update preview
+      if (interaction?.kind === 'shape-draw') {
+        const point = clientPointToDocumentPoint(event.clientX, event.clientY, svg, effectiveViewBoxRef.current)
+        interaction.currentDoc = point
+        setShapePreviewCurrent({ ...point })
+        return
+      }
+
+      if (interaction?.kind === 'drag-selection') {
         const point = clientPointToDocumentPoint(event.clientX, event.clientY, svg, effectiveViewBoxRef.current)
         const dx = point.x - interaction.originX
         const dy = point.y - interaction.originY
@@ -360,7 +608,7 @@ export function CanvasArtworkLayer() {
         return
       }
 
-      if (interaction.kind === 'pan-canvas') {
+      if (interaction?.kind === 'pan-canvas') {
         const rect = svg.getBoundingClientRect()
         const unitsPerPixelX = effectiveViewBoxRef.current.width / rect.width
         const unitsPerPixelY = effectiveViewBoxRef.current.height / rect.height
@@ -371,7 +619,7 @@ export function CanvasArtworkLayer() {
         return
       }
 
-      if (interaction.kind === 'marquee-select') {
+      if (interaction?.kind === 'marquee-select') {
         const point = clientPointToDocumentPoint(event.clientX, event.clientY, svg, effectiveViewBoxRef.current)
         const rect = normalizeBounds({
           x: interaction.origin.x,
@@ -384,6 +632,13 @@ export function CanvasArtworkLayer() {
           interaction.moved = true
           setMarqueeRect(rect)
         }
+        return
+      }
+
+      // Pen mode: track cursor for preview overlay
+      if (modeRef.current === 'pen') {
+        const point = clientPointToDocumentPoint(event.clientX, event.clientY, svg, effectiveViewBoxRef.current)
+        useEditorStore.getState().setPenCursorPoint(point)
       }
     }
 
@@ -392,6 +647,16 @@ export function CanvasArtworkLayer() {
       if (activePointersRef.current.size < 2) pinchRef.current = null
 
       const interaction = interactionRef.current
+
+      // Shape draw: commit the shape
+      if (interaction?.kind === 'shape-draw') {
+        const { shapeType: drawType, originDoc, currentDoc } = interaction
+        setShapePreviewCurrent(null)
+        interactionRef.current = null
+        void commitShapeDraw(drawType, originDoc, currentDoc)
+        return
+      }
+
       if (interaction?.kind === 'marquee-select') {
         const marqueeRect = useEditorStore.getState().ui.marqueeRect
         if (interaction.moved && marqueeRect) {
@@ -424,7 +689,7 @@ export function CanvasArtworkLayer() {
       window.removeEventListener('pointerup', handlePointerUp)
       window.removeEventListener('pointercancel', handlePointerUp)
     }
-  }, [finishInteraction, maybeBeginPinch, replaceDocument, setPan, setMarqueeRect, setSelection, clearSelection])
+  }, [commitShapeDraw, finishInteraction, maybeBeginPinch, replaceDocument, setPan, setMarqueeRect, setSelection, clearSelection])
 
   const handleNodePointerDown = (event: ReactPointerEvent<SVGElement>, id: string) => {
     const svg = svgRef.current
@@ -434,6 +699,20 @@ export function CanvasArtworkLayer() {
     if (activePointersRef.current.size >= 2) {
       void finishInteraction()
       maybeBeginPinch(event.clientX, event.clientY)
+      return
+    }
+
+    // In pen or shape mode: node clicks do nothing (drawing on canvas)
+    if (mode === 'pen' || mode === 'shape') return
+
+    // In text mode: tapping a text node selects it and opens typography inspector
+    if (mode === 'text') {
+      const clickedNode = getNodeById(document.root, id)
+      if (clickedNode?.type === 'text') {
+        setSelection([id])
+        openInspectorSection('typography')
+        setMode('select')
+      }
       return
     }
 
@@ -506,7 +785,7 @@ export function CanvasArtworkLayer() {
     }
   }
 
-  const handleBackgroundPointerDown = (event: ReactPointerEvent<SVGSVGElement>) => {
+  const handleBackgroundPointerDown = async (event: ReactPointerEvent<SVGSVGElement>) => {
     activePointersRef.current.set(event.pointerId, { clientX: event.clientX, clientY: event.clientY })
     if (activePointersRef.current.size >= 2) {
       void finishInteraction()
@@ -535,6 +814,32 @@ export function CanvasArtworkLayer() {
       return
     }
 
+    if (mode === 'shape') {
+      const point = clientPointToDocumentPoint(event.clientX, event.clientY, svg, effectiveViewBox)
+      clearSelection()
+      interactionRef.current = {
+        kind: 'shape-draw',
+        originDoc: point,
+        currentDoc: point,
+        shapeType: useEditorStore.getState().ui.shapeType
+      }
+      return
+    }
+
+    if (mode === 'text') {
+      const point = clientPointToDocumentPoint(event.clientX, event.clientY, svg, effectiveViewBox)
+      await runCommand('document.addText', { x: Math.round(point.x), y: Math.round(point.y), content: 'Text' })
+      openInspectorSection('typography')
+      setMode('select')
+      return
+    }
+
+    if (mode === 'pen') {
+      const point = clientPointToDocumentPoint(event.clientX, event.clientY, svg, effectiveViewBox)
+      await handlePenClick(point)
+      return
+    }
+
     if (mode === 'select') {
       const point = clientPointToDocumentPoint(event.clientX, event.clientY, svg, effectiveViewBox)
       interactionRef.current = {
@@ -545,6 +850,18 @@ export function CanvasArtworkLayer() {
       }
       // Don't show the marquee rect yet — wait until pointer moves past threshold
       // to avoid a 1×1 flash on every background tap.
+      return
+    }
+
+    // structure, paint, inspect: treat as select mode for clicking
+    if (mode === 'structure' || mode === 'paint' || mode === 'inspect') {
+      const point = clientPointToDocumentPoint(event.clientX, event.clientY, svg, effectiveViewBox)
+      interactionRef.current = {
+        kind: 'marquee-select',
+        origin: point,
+        append: multiSelectEnabled || event.shiftKey,
+        moved: false
+      }
       return
     }
 
@@ -568,6 +885,8 @@ export function CanvasArtworkLayer() {
     useEditorStore.getState().setCamera(result.zoom, result.panX, result.panY)
   }
 
+  const shapeDrawInteraction = interactionRef.current?.kind === 'shape-draw' ? interactionRef.current : null
+
   return (
     <svg
       ref={svgRef}
@@ -579,6 +898,28 @@ export function CanvasArtworkLayer() {
       style={{ touchAction: 'none' }}
     >
       {document.root.children?.map((node) => renderNode(node, selectedIds, handleNodePointerDown))}
+
+      {/* Shape draw ghost preview */}
+      {mode === 'shape' && shapePreviewCurrent && shapeDrawInteraction && (
+        <ShapeDrawGhost
+          shapeType={shapeDrawInteraction.shapeType}
+          origin={shapeDrawInteraction.originDoc}
+          current={shapePreviewCurrent}
+        />
+      )}
     </svg>
   )
+}
+
+// ── Tree update helper ────────────────────────────────────────────────────────
+
+function updateNodeD(doc: SvgDocument, nodeId: string, nextD: string): SvgDocument {
+  function walk(node: SvgNode): SvgNode {
+    if (node.id === nodeId && node.type === 'path') {
+      return { ...node, d: nextD } as SvgNode
+    }
+    if (!node.children?.length) return node
+    return { ...node, children: node.children.map(walk) } as SvgNode
+  }
+  return { ...doc, root: walk(doc.root) } as SvgDocument
 }

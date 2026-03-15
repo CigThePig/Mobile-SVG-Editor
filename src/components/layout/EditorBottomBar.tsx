@@ -7,24 +7,59 @@ const modeConfig: { mode: EditorMode; icon: LucideIcon; label: string; available
   { mode: 'select', icon: MousePointer2, label: 'Select', available: true },
   { mode: 'shape', icon: Square, label: 'Shape', available: true },
   { mode: 'pen', icon: PenTool, label: 'Pen', available: true },
-  { mode: 'text', icon: Type, label: 'Text', available: false },
-  { mode: 'paint', icon: Paintbrush, label: 'Paint', available: false },
-  { mode: 'structure', icon: LayoutGrid, label: 'Structure', available: false },
-  { mode: 'inspect', icon: Search, label: 'Inspect', available: false }
+  { mode: 'text', icon: Type, label: 'Text', available: true },
+  { mode: 'paint', icon: Paintbrush, label: 'Paint', available: true },
+  { mode: 'structure', icon: LayoutGrid, label: 'Structure', available: true },
+  { mode: 'inspect', icon: Search, label: 'Inspect', available: true }
 ]
 
 export function EditorBottomBar() {
   const mode = useEditorStore((s) => s.mode)
   const setMode = useEditorStore((s) => s.setMode)
   const setPathEditMode = useEditorStore((s) => s.setPathEditMode)
+  const discardPenPath = useEditorStore((s) => s.discardPenPath)
+  const setLeftPanelOpen = useEditorStore((s) => s.setLeftPanelOpen)
+  const openInspectorSection = useEditorStore((s) => s.openInspectorSection)
 
   const handleModeClick = (m: EditorMode) => {
-    // Clicking select (or any non-path tool) while in path mode exits path edit
+    // Clicking any non-path tool while in path mode exits path edit
     if (mode === 'path' && m !== 'path') {
       setPathEditMode(null)
       if (m !== 'select') setMode(m)
       return
     }
+
+    // Leaving pen mode with an in-progress path discards it
+    if (mode === 'pen' && m !== 'pen') {
+      discardPenPath()
+      if (m !== 'select') setMode(m)
+      // discardPenPath already sets mode to 'select'; if target is select we're done
+      if (m === 'select') return
+      // otherwise setMode was called above
+      return
+    }
+
+    // Structure: open layers panel
+    if (m === 'structure') {
+      setMode(m)
+      setLeftPanelOpen(true)
+      return
+    }
+
+    // Inspect: pin inspector open
+    if (m === 'inspect') {
+      openInspectorSection('quick')
+      setMode(m)
+      return
+    }
+
+    // Paint: open appearance inspector
+    if (m === 'paint') {
+      openInspectorSection('appearance')
+      setMode(m)
+      return
+    }
+
     setMode(m)
   }
 

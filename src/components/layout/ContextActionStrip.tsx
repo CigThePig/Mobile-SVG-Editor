@@ -121,6 +121,8 @@ export function ContextActionStrip() {
   const discardPenPath = useEditorStore((s) => s.discardPenPath)
   const openInspectorSection = useEditorStore((s) => s.openInspectorSection)
   const activePathPointIds = useEditorStore((s) => s.selection.activePathPointIds)
+  const isolationRootId = useEditorStore((s) => s.selection.isolationRootId)
+  const setIsolationRoot = useEditorStore((s) => s.setIsolationRoot)
   const snapEnabled = view.snapEnabled
 
   const canGroup = selectionCount >= 2
@@ -441,6 +443,17 @@ export function ContextActionStrip() {
   // ── Default strip: select / navigate / structure modes ────────────────────
   return stripContainer(
     <>
+      {/* Isolation mode indicator */}
+      {isolationRootId && (
+        <>
+          {modeBadge('Group', '#fbbf24')}
+          <button style={pill(false)} onClick={() => setIsolationRoot(undefined)}>
+            ↩ Exit Group
+          </button>
+          {divider()}
+        </>
+      )}
+
       {/* Mode badge */}
       {modeBadge(MODE_LABELS[mode] ?? mode)}
 

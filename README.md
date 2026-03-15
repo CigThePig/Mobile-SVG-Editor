@@ -193,14 +193,14 @@ Goal: eliminate root-only and hardcoded editing behavior.
 - ✓ Remove hardcoded path action targeting — `ContextActionStrip` path-mode buttons now use the selected anchor's actual `subpathIndex`/`anchorIndex` and are disabled when no point is selected
 - ✓ Isolation-aware selection behavior — double-tapping a group enters isolation mode (`isolationRootId`); marquee selection and tap-outside exit isolation mode
 
-### Phase 3: harden structure editing
+### Phase 3: harden structure editing ✓ COMPLETE
 
 Goal: make grouping and nesting reliable.
 
-- Recursive duplicate support (currently root-only)
-- Better nested reorder operations
-- Isolation mode for entering and editing groups
-- Drag/drop or explicit move-in/out controls in layers panel
+- ✓ Recursive duplicate support — `duplicateNodesCommand` now uses `getParentInfo` to find nodes at any depth and inserts the clone in the correct parent
+- ✓ Better nested reorder operations — `reorderInTree` already traverses the full tree; isolation breadcrumb in context strip makes the current editing scope clear
+- ✓ Isolation mode visual indicator — non-isolated nodes dim to 20% opacity on canvas; "Exit Group" button appears in the context action strip while in isolation
+- ✓ Explicit move-in/out controls in layers panel — "⬅" button on each nested node pops it out of its parent group; "⬇" button on group rows moves selected nodes into that group
 
 ### Phase 4: replace approximation-heavy geometry
 
@@ -235,13 +235,11 @@ Goal: keep the editor usable as complexity rises.
 ### Known open issues
 
 - Pen mode is corner-only (no bezier handle drag while placing). Refine in path edit mode after committing.
-- `duplicateNodesCommand` only works for root-level nodes.
 - Transform math for ungroup is approximate for complex (rotate + scale) groups.
 - Path bounds calculation is approximate for relative commands and arcs.
 - Boolean operations flatten curves to sampled polygons.
 - Several pages (export, home, settings, inspect) remain as placeholders.
 - No grid, guide, or snap-to-grid overlay despite state fields existing.
-- Group isolation mode has no visual indicator (dimming of non-isolated nodes is Phase 3).
 
 ## Current run commands
 

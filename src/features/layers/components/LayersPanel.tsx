@@ -71,12 +71,14 @@ interface LayerRowProps {
   depth: number
   isSelected: boolean
   isLastChild: boolean
+  isInsideGroup: boolean
   onSelect: (event: MouseEvent<HTMLButtonElement>, id: string) => void
 }
 
-function LayerRow({ node, depth, isSelected, onSelect }: LayerRowProps) {
+function LayerRow({ node, depth, isSelected, isInsideGroup, onSelect }: LayerRowProps) {
   const hasChildren = Boolean(node.children?.length)
   const childCount = node.children?.length ?? 0
+  const selectedIds = useEditorStore((s) => s.selection.selectedNodeIds)
 
   const toggleVisibility = (e: MouseEvent) => {
     e.stopPropagation()
@@ -237,6 +239,58 @@ function LayerRow({ node, depth, isSelected, onSelect }: LayerRowProps) {
         >
           {node.locked ? <Lock size={13} /> : <Unlock size={13} />}
         </button>
+
+        {/* Move Out — pop this node out of its parent group */}
+        {isInsideGroup && (
+          <button
+            onClick={(e) => { e.stopPropagation(); void runCommand('document.moveNodeOutOfGroup', { nodeId: node.id }) }}
+            title="Move out of group"
+            style={{
+              width: 28,
+              height: 44,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              color: 'rgba(255,255,255,0.35)',
+              flexShrink: 0,
+              borderRadius: 6,
+              fontSize: 14
+            }}
+          >
+            ⬅
+          </button>
+        )}
+
+        {/* Move In — move currently selected nodes into this group */}
+        {node.type === 'group' && selectedIds.some((id) => id !== node.id) && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              const toMove = selectedIds.filter((id) => id !== node.id)
+              void runCommand('document.moveNodesIntoGroup', { nodeIds: toMove, targetGroupId: node.id })
+            }}
+            title="Move selected into this group"
+            style={{
+              width: 28,
+              height: 44,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              color: 'rgba(255,255,255,0.35)',
+              flexShrink: 0,
+              borderRadius: 6,
+              fontSize: 14
+            }}
+          >
+            ⬇
+          </button>
+        )}
       </div>
 
       {/* Children */}
@@ -273,6 +327,7 @@ function ChildRows({
       depth={depth}
       isSelected={isSelected}
       isLastChild={isLastChild}
+      isInsideGroup={depth > 0}
       onSelect={onSelect}
     />
   )
@@ -386,6 +441,7 @@ export function LayersPanel() {
                       depth={0}
                       isSelected={isSelected}
                       isLastChild={idx === nodes.length - 1}
+                      isInsideGroup={false}
                       onSelect={handleSelect}
                     />
                   )

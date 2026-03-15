@@ -357,6 +357,8 @@ export function CanvasArtworkLayer() {
   const openInspectorSection = useEditorStore((s) => s.openInspectorSection)
   const setMode = useEditorStore((s) => s.setMode)
 
+  const isolationRootId = useEditorStore((s) => s.selection.isolationRootId)
+
   const [shapePreviewCurrent, setShapePreviewCurrent] = useState<{ x: number; y: number } | null>(null)
 
   const lastTapRef = useRef<{ id: string; time: number } | null>(null)
@@ -937,7 +939,17 @@ export function CanvasArtworkLayer() {
       onWheel={handleWheel}
       style={{ touchAction: 'none' }}
     >
-      {document.root.children?.map((node) => renderNode(node, selectedIds, handleNodePointerDown))}
+      {document.root.children?.map((node) => {
+        const isDimmed = Boolean(isolationRootId) && node.id !== isolationRootId
+        if (isDimmed) {
+          return (
+            <g key={node.id} opacity={0.2} style={{ pointerEvents: 'none' as const }}>
+              {renderNode(node, [], handleNodePointerDown)}
+            </g>
+          )
+        }
+        return renderNode(node, selectedIds, handleNodePointerDown)
+      })}
 
       {/* Shape draw ghost preview */}
       {mode === 'shape' && shapePreviewCurrent && shapeDrawInteraction && (

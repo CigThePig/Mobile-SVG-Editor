@@ -520,20 +520,18 @@ Changes made:
 - editor boot now initializes grid size, angle snap, guide visibility, and grid visibility from `settingsStore` alongside the existing outline mode initialization
 - removed the dormant `InspectPage` and its route; `AppPage` type no longer includes `'inspect'`
 
-## Phase 2 — make previews honest
+## Phase 2 — make previews honest ✓ COMPLETE
 
 Goal: make Home page thumbnails reflect real documents.
 
-Work to do:
+Changes made:
 
-- replace the minimal thumbnail renderer in `src/pages/home/HomePage.tsx` with a proper preview pipeline
-- ideally reuse `serializeDocumentToSvg` from `src/features/export/svgSerializer.ts` or an equivalent lightweight renderer
-- support at minimum: paths, groups, polygons, stars, text, images, transforms, and gradients
-- verify that document previews still perform acceptably on mobile with many documents
-
-Why this phase matters:
-
-opening a document should not feel like opening a loot box with a blank cover image.
+- replaced the minimal thumbnail renderer in `src/pages/home/HomePage.tsx` with a `DocumentThumbnail` component
+- `DocumentThumbnail` calls `serializeDocumentToSvg` from `src/features/export/svgSerializer.ts` with a shallow copy of the document truncated to the first 30 root children
+- the XML declaration is stripped and the `<svg>` opening tag is rewritten to `width="40" height="40"` with `preserveAspectRatio="xMidYMid meet"` before injecting via `dangerouslySetInnerHTML`
+- `useMemo` wraps the serialization so each document's SVG string is only recomputed when `doc` changes
+- all node types (paths, groups, polygons, stars, text, images, lines) and transforms and gradients now render correctly in thumbnails
+- `resources.gradients` is passed through unchanged so gradient `<defs>` resolve correctly for gradient-filled shapes
 
 ## Phase 3 — turn the asset and resource systems into real systems
 

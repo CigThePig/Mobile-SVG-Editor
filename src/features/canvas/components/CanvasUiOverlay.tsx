@@ -5,9 +5,11 @@ export function CanvasUiOverlay() {
   const showGrid = useEditorStore((s) => s.view.showGrid)
   const showGuides = useEditorStore((s) => s.view.showGuides)
   const snapEnabled = useEditorStore((s) => s.view.snapEnabled)
+  const outlineMode = useEditorStore((s) => s.view.outlineMode)
   const toggleGrid = useEditorStore((s) => s.toggleGrid)
   const toggleGuides = useEditorStore((s) => s.toggleGuides)
   const toggleSnapEnabled = useEditorStore((s) => s.toggleSnapEnabled)
+  const toggleOutlineMode = useEditorStore((s) => s.toggleOutlineMode)
   const addGuide = useEditorStore((s) => s.addGuide)
   const activeDocument = useEditorStore((s) => s.activeDocument)
 
@@ -134,6 +136,23 @@ export function CanvasUiOverlay() {
           <line x1="10" y1="7" x2="13" y2="7" />
         </svg>
         Snap
+      </button>
+
+      {/* Outline mode toggle */}
+      <button
+        style={{
+          ...pillStyle,
+          color: outlineMode ? '#e879f9' : 'rgba(255,255,255,0.55)',
+          background: outlineMode ? 'rgba(232,121,249,0.18)' : 'rgba(0,0,0,0.45)'
+        }}
+        onClick={toggleOutlineMode}
+        title="Toggle outline mode"
+      >
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5">
+          <rect x="2" y="2" width="10" height="10" rx="1" />
+          <circle cx="7" cy="7" r="2.5" />
+        </svg>
+        Outline
       </button>
     </div>
   )

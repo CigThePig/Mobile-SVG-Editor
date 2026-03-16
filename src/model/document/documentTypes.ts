@@ -1,5 +1,6 @@
 import type { SvgNode } from '@/model/nodes/nodeTypes'
 import type { ResourceStore } from '@/model/resources/resourceTypes'
+import type { Guide } from '@/model/view/viewTypes'
 
 export interface SvgDocument {
   id: string
@@ -43,4 +44,5 @@ export interface PerDocumentEditorState {
   showGrid?: boolean
   showGuides?: boolean
   snapEnabled?: boolean
+  guides?: Guide[]
 }

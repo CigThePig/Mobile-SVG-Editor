@@ -65,6 +65,7 @@ interface EditorStore {
   toggleSnapEnabled: () => void
   toggleGrid: () => void
   toggleGuides: () => void
+  toggleOutlineMode: () => void
   addGuide: (orientation: GuideOrientation, position: number) => void
   moveGuide: (id: string, position: number) => void
   removeGuide: (id: string) => void
@@ -233,6 +234,8 @@ export const useEditorStore = create<EditorStore>()(
     replaceDocument: (doc) =>
       set((state) => {
         state.activeDocument = doc
+        // Restore per-document view state
+        state.view.guides = doc.editorState?.guides ?? []
       }),
     toggleSnapEnabled: () =>
       set((state) => {
@@ -246,19 +249,35 @@ export const useEditorStore = create<EditorStore>()(
       set((state) => {
         state.view.showGuides = !state.view.showGuides
       }),
-    addGuide: (orientation, position) =>
+    toggleOutlineMode: () =>
+      set((state) => {
+        state.view.outlineMode = !state.view.outlineMode
+      }),
+    addGuide: (orientation, position) => {
       set((state) => {
         state.view.guides.push({ id: nanoid(8), orientation, position })
-      }),
-    moveGuide: (id, position) =>
+        if (!state.activeDocument.editorState) state.activeDocument.editorState = {}
+        state.activeDocument.editorState.guides = state.view.guides.map((g) => ({ ...g }))
+      })
+      void saveDocument(get().activeDocument)
+    },
+    moveGuide: (id, position) => {
       set((state) => {
         const guide = state.view.guides.find((g) => g.id === id)
         if (guide) guide.position = position
-      }),
-    removeGuide: (id) =>
+        if (!state.activeDocument.editorState) state.activeDocument.editorState = {}
+        state.activeDocument.editorState.guides = state.view.guides.map((g) => ({ ...g }))
+      })
+      void saveDocument(get().activeDocument)
+    },
+    removeGuide: (id) => {
       set((state) => {
         state.view.guides = state.view.guides.filter((g) => g.id !== id)
-      }),
+        if (!state.activeDocument.editorState) state.activeDocument.editorState = {}
+        state.activeDocument.editorState.guides = state.view.guides.map((g) => ({ ...g }))
+      })
+      void saveDocument(get().activeDocument)
+    },
     setActivePathPointIds: (ids) =>
       set((state) => {
         state.selection.activePathPointIds = ids

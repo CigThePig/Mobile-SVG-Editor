@@ -23,6 +23,7 @@ import { useEditorStore } from '@/stores/editorStore'
 import { useHistoryStore } from '@/stores/historyStore'
 import { runCommand } from '@/features/documents/services/commandRunner'
 import { parsePathD, serializePathD } from '@/features/path/utils/pathGeometry'
+import { snapPoint, screenThresholdToDocSpace } from '@/features/path/utils/snapUtils'
 
 function fillFromNode(node: { style?: { fill?: { kind: string; color?: string; resourceId?: string } } }) {
   if (!node.style?.fill) return 'transparent'
@@ -80,7 +81,7 @@ function computeStarPoints(cx: number, cy: number, outer: number, inner: number,
   return pts.join(' ')
 }
 
-function renderNode(node: SvgNode, selectedIds: string[], onPointerDown: (event: ReactPointerEvent<SVGElement>, id: string) => void): ReactNode {
+function renderNode(node: SvgNode, selectedIds: string[], onPointerDown: (event: ReactPointerEvent<SVGElement>, id: string) => void, outlineMode = false): ReactNode {
   if (node.visible === false) return null
   const isSelected = selectedIds.includes(node.id)
   const common = {
@@ -94,53 +95,70 @@ function renderNode(node: SvgNode, selectedIds: string[], onPointerDown: (event:
     transform: transformToSvgString(node.transform)
   }
 
+  // In outline mode: suppress fill, ensure a visible stroke
+  function outlineFill() { return 'none' }
+  function outlineStroke(n: Parameters<typeof strokeFromNode>[0]) {
+    const { stroke, strokeWidth } = strokeFromNode(n)
+    return {
+      stroke: stroke !== 'transparent' ? stroke : '#888888',
+      strokeWidth: Math.max(1, strokeWidth)
+    }
+  }
+
   switch (node.type) {
     case 'rect': {
       const n = node as RectNode
-      const { stroke, strokeWidth } = strokeFromNode(n)
-      return <rect {...common} x={n.x} y={n.y} width={n.width} height={n.height} rx={n.rx} ry={n.ry} fill={fillFromNode(n)} stroke={stroke} strokeWidth={strokeWidth} />
+      const fill = outlineMode ? outlineFill() : fillFromNode(n)
+      const { stroke, strokeWidth } = outlineMode ? outlineStroke(n) : strokeFromNode(n)
+      return <rect {...common} x={n.x} y={n.y} width={n.width} height={n.height} rx={n.rx} ry={n.ry} fill={fill} stroke={stroke} strokeWidth={strokeWidth} />
     }
     case 'circle': {
       const n = node as CircleNode
-      const { stroke, strokeWidth } = strokeFromNode(n)
-      return <circle {...common} cx={n.cx} cy={n.cy} r={n.r} fill={fillFromNode(n)} stroke={stroke} strokeWidth={strokeWidth} />
+      const fill = outlineMode ? outlineFill() : fillFromNode(n)
+      const { stroke, strokeWidth } = outlineMode ? outlineStroke(n) : strokeFromNode(n)
+      return <circle {...common} cx={n.cx} cy={n.cy} r={n.r} fill={fill} stroke={stroke} strokeWidth={strokeWidth} />
     }
     case 'ellipse': {
       const n = node as EllipseNode
-      const { stroke, strokeWidth } = strokeFromNode(n)
-      return <ellipse {...common} cx={n.cx} cy={n.cy} rx={n.rx} ry={n.ry} fill={fillFromNode(n)} stroke={stroke} strokeWidth={strokeWidth} />
+      const fill = outlineMode ? outlineFill() : fillFromNode(n)
+      const { stroke, strokeWidth } = outlineMode ? outlineStroke(n) : strokeFromNode(n)
+      return <ellipse {...common} cx={n.cx} cy={n.cy} rx={n.rx} ry={n.ry} fill={fill} stroke={stroke} strokeWidth={strokeWidth} />
     }
     case 'line': {
       const n = node as LineNode
-      const { stroke, strokeWidth } = strokeFromNode(n)
+      const { stroke, strokeWidth } = outlineMode ? outlineStroke(n) : strokeFromNode(n)
       return <line {...common} x1={n.x1} y1={n.y1} x2={n.x2} y2={n.y2} stroke={stroke} strokeWidth={strokeWidth || 2} />
     }
     case 'polyline': {
       const n = node as PolylineNode
-      const { stroke, strokeWidth } = strokeFromNode(n)
+      const { stroke, strokeWidth } = outlineMode ? outlineStroke(n) : strokeFromNode(n)
       return <polyline {...common} points={n.points.map((p) => `${p.x},${p.y}`).join(' ')} fill="none" stroke={stroke} strokeWidth={strokeWidth} />
     }
     case 'polygon': {
       const n = node as PolygonNode
-      const { stroke, strokeWidth } = strokeFromNode(n)
-      return <polygon {...common} points={n.points.map((p) => `${p.x},${p.y}`).join(' ')} fill={fillFromNode(n)} stroke={stroke} strokeWidth={strokeWidth} />
+      const fill = outlineMode ? outlineFill() : fillFromNode(n)
+      const { stroke, strokeWidth } = outlineMode ? outlineStroke(n) : strokeFromNode(n)
+      return <polygon {...common} points={n.points.map((p) => `${p.x},${p.y}`).join(' ')} fill={fill} stroke={stroke} strokeWidth={strokeWidth} />
     }
     case 'star': {
       const n = node as StarNode
-      const { stroke, strokeWidth } = strokeFromNode(n)
+      const fill = outlineMode ? outlineFill() : fillFromNode(n)
+      const { stroke, strokeWidth } = outlineMode ? outlineStroke(n) : strokeFromNode(n)
       const pts = computeStarPoints(n.cx, n.cy, n.outerRadius, n.innerRadius, n.numPoints)
-      return <polygon {...common} points={pts} fill={fillFromNode(n)} stroke={stroke} strokeWidth={strokeWidth} />
+      return <polygon {...common} points={pts} fill={fill} stroke={stroke} strokeWidth={strokeWidth} />
     }
     case 'path': {
       const n = node as PathNode
-      const { stroke, strokeWidth } = strokeFromNode(n)
-      return <path {...common} d={n.d} fill={fillFromNode(n)} stroke={stroke} strokeWidth={strokeWidth} />
+      const fill = outlineMode ? outlineFill() : fillFromNode(n)
+      const { stroke, strokeWidth } = outlineMode ? outlineStroke(n) : strokeFromNode(n)
+      return <path {...common} d={n.d} fill={fill} stroke={stroke} strokeWidth={strokeWidth} />
     }
     case 'text': {
       const n = node as TextNode
-      const { stroke, strokeWidth } = strokeFromNode(n)
+      const fill = outlineMode ? outlineFill() : fillFromNode(n)
+      const { stroke, strokeWidth } = outlineMode ? outlineStroke(n) : strokeFromNode(n)
       return (
-        <text {...common} x={n.x} y={n.y} fill={fillFromNode(n)} stroke={stroke} strokeWidth={strokeWidth} fontFamily={n.textStyle?.fontFamily} fontSize={n.textStyle?.fontSize}>
+        <text {...common} x={n.x} y={n.y} fill={fill} stroke={stroke} strokeWidth={strokeWidth} fontFamily={n.textStyle?.fontFamily} fontSize={n.textStyle?.fontSize}>
           {n.content}
         </text>
       )
@@ -157,13 +175,13 @@ function renderNode(node: SvgNode, selectedIds: string[], onPointerDown: (event:
             onPointerDown(e, node.id)
           }}
         >
-          {node.children?.map((child) => renderNode(child, selectedIds, onPointerDown))}
+          {node.children?.map((child) => renderNode(child, selectedIds, onPointerDown, outlineMode))}
         </g>
       )
     case 'root':
       return (
         <g key={node.id}>
-          {node.children?.map((child) => renderNode(child, selectedIds, onPointerDown))}
+          {node.children?.map((child) => renderNode(child, selectedIds, onPointerDown, outlineMode))}
         </g>
       )
     default:
@@ -268,17 +286,6 @@ function isDescendantOfSelectedGroup(root: SvgNode, ancestorIds: string[], desce
   return false
 }
 
-/**
- * Build a polygon-points string for a regular polygon given center and radius.
- */
-function buildPolygonPoints(cx: number, cy: number, radius: number, sides: number): Array<{ x: number; y: number }> {
-  const pts: Array<{ x: number; y: number }> = []
-  for (let i = 0; i < sides; i++) {
-    const angle = (Math.PI * 2 * i) / sides - Math.PI / 2
-    pts.push({ x: cx + radius * Math.cos(angle), y: cy + radius * Math.sin(angle) })
-  }
-  return pts
-}
 
 // ── Shape draw ghost renderer ─────────────────────────────────────────────────
 
@@ -359,6 +366,7 @@ export function CanvasArtworkLayer() {
   const commitPenPath = useEditorStore((s) => s.commitPenPath)
   const openInspectorSection = useEditorStore((s) => s.openInspectorSection)
   const setMode = useEditorStore((s) => s.setMode)
+  const outlineMode = useEditorStore((s) => s.view.outlineMode)
 
   const isolationRootId = useEditorStore((s) => s.selection.isolationRootId)
 
@@ -589,9 +597,7 @@ export function CanvasArtworkLayer() {
         const cy = Math.round(bounds.y + bounds.height / 2)
         const radius = Math.round(Math.min(bounds.width, bounds.height) / 2)
         const sides = 6
-        const points = buildPolygonPoints(cx, cy, radius, sides)
         await runCommand('document.addPolygon', { cx, cy, radius, sides })
-        void points // computed above but runCommand handles generation
         break
       }
       case 'star': {
@@ -693,9 +699,14 @@ export function CanvasArtworkLayer() {
 
         const drag = penDragStateRef.current
         if (drag) {
-          const zoom = useEditorStore.getState().view.zoom
-          const dx = point.x - drag.anchorDocPt.x
-          const dy = point.y - drag.anchorDocPt.y
+          const { view: v } = useEditorStore.getState()
+          const zoom = v.zoom
+          // Snap the handle endpoint to grid/guides when snap is enabled
+          const snappedPt = v.snapEnabled
+            ? snapPoint(point, [], v.snapConfig, screenThresholdToDocSpace(8, zoom), v.guides)
+            : point
+          const dx = snappedPt.x - drag.anchorDocPt.x
+          const dy = snappedPt.y - drag.anchorDocPt.y
           const screenDist = Math.hypot(dx, dy) * zoom
           if (screenDist > 4) {
             // Update isDragging flag
@@ -1038,11 +1049,11 @@ export function CanvasArtworkLayer() {
         if (isDimmed) {
           return (
             <g key={node.id} opacity={0.2} style={{ pointerEvents: 'none' as const }}>
-              {renderNode(node, [], handleNodePointerDown)}
+              {renderNode(node, [], handleNodePointerDown, outlineMode)}
             </g>
           )
         }
-        return renderNode(node, selectedIds, handleNodePointerDown)
+        return renderNode(node, selectedIds, handleNodePointerDown, outlineMode)
       })}
 
       {/* Shape draw ghost preview */}

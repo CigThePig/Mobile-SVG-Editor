@@ -321,7 +321,7 @@ function parseRect(el: Element, ctx: ParseContext): RectNode {
     style,
     transform,
     className: el.getAttribute('class') ?? undefined,
-    preservation: buildPreservationMeta({ element: el, editabilityLevel: 1, knownAttrs: RECT_ATTRS }),
+    preservation: buildPreservationMeta({ element: el, editabilityLevel: 1, knownAttrs: RECT_ATTRS, ctx }),
   }
 }
 
@@ -339,7 +339,7 @@ function parseCircle(el: Element, ctx: ParseContext): CircleNode {
     style: parseAppearance(resolved, el),
     transform: parseTransform(el.getAttribute('transform'), ctx, id),
     className: el.getAttribute('class') ?? undefined,
-    preservation: buildPreservationMeta({ element: el, editabilityLevel: 1, knownAttrs: CIRCLE_ATTRS }),
+    preservation: buildPreservationMeta({ element: el, editabilityLevel: 1, knownAttrs: CIRCLE_ATTRS, ctx }),
   }
 }
 
@@ -358,7 +358,7 @@ function parseEllipse(el: Element, ctx: ParseContext): EllipseNode {
     style: parseAppearance(resolved, el),
     transform: parseTransform(el.getAttribute('transform'), ctx, id),
     className: el.getAttribute('class') ?? undefined,
-    preservation: buildPreservationMeta({ element: el, editabilityLevel: 1, knownAttrs: ELLIPSE_ATTRS }),
+    preservation: buildPreservationMeta({ element: el, editabilityLevel: 1, knownAttrs: ELLIPSE_ATTRS, ctx }),
   }
 }
 
@@ -377,7 +377,7 @@ function parseLine(el: Element, ctx: ParseContext): LineNode {
     style: parseAppearance(resolved, el),
     transform: parseTransform(el.getAttribute('transform'), ctx, id),
     className: el.getAttribute('class') ?? undefined,
-    preservation: buildPreservationMeta({ element: el, editabilityLevel: 1, knownAttrs: LINE_ATTRS }),
+    preservation: buildPreservationMeta({ element: el, editabilityLevel: 1, knownAttrs: LINE_ATTRS, ctx }),
   }
 }
 
@@ -403,7 +403,7 @@ function parsePolyline(el: Element, ctx: ParseContext): PolylineNode {
     style: parseAppearance(resolved, el),
     transform: parseTransform(el.getAttribute('transform'), ctx, id),
     className: el.getAttribute('class') ?? undefined,
-    preservation: buildPreservationMeta({ element: el, editabilityLevel: 1, knownAttrs: POLY_ATTRS }),
+    preservation: buildPreservationMeta({ element: el, editabilityLevel: 1, knownAttrs: POLY_ATTRS, ctx }),
   }
 }
 
@@ -419,7 +419,7 @@ function parsePolygon(el: Element, ctx: ParseContext): PolygonNode {
     style: parseAppearance(resolved, el),
     transform: parseTransform(el.getAttribute('transform'), ctx, id),
     className: el.getAttribute('class') ?? undefined,
-    preservation: buildPreservationMeta({ element: el, editabilityLevel: 1, knownAttrs: POLY_ATTRS }),
+    preservation: buildPreservationMeta({ element: el, editabilityLevel: 1, knownAttrs: POLY_ATTRS, ctx }),
   }
 }
 
@@ -435,7 +435,7 @@ function parsePath(el: Element, ctx: ParseContext): PathNode {
     style: parseAppearance(resolved, el),
     transform: parseTransform(el.getAttribute('transform'), ctx, id),
     className: el.getAttribute('class') ?? undefined,
-    preservation: buildPreservationMeta({ element: el, editabilityLevel: 1, knownAttrs: PATH_ATTRS }),
+    preservation: buildPreservationMeta({ element: el, editabilityLevel: 1, knownAttrs: PATH_ATTRS, ctx }),
   }
 }
 
@@ -454,7 +454,7 @@ function parseGroup(el: Element, ctx: ParseContext): GroupNode {
     style: parseAppearance(resolved, el),
     transform: parseTransform(el.getAttribute('transform'), ctx, id),
     className: el.getAttribute('class') ?? undefined,
-    preservation: buildPreservationMeta({ element: el, editabilityLevel: 1, knownAttrs: GROUP_ATTRS }),
+    preservation: buildPreservationMeta({ element: el, editabilityLevel: 1, knownAttrs: GROUP_ATTRS, ctx }),
   }
 }
 
@@ -468,13 +468,14 @@ function parseDefs(el: Element, ctx: ParseContext): DefsNode {
     visible: true,
     locked: false,
     children: parseChildren(el, ctx),
-    preservation: buildPreservationMeta({ element: el, editabilityLevel: 1, knownAttrs: DEFS_ATTRS }),
+    preservation: buildPreservationMeta({ element: el, editabilityLevel: 1, knownAttrs: DEFS_ATTRS, ctx }),
   }
 }
 
 function parseSymbol(el: Element, ctx: ParseContext): SymbolNode {
   const id = getNodeId(el)
   const resolved = resolveElementStyle(el, ctx)
+  ctx.hasLevel2Nodes = true
   return {
     id,
     type: 'symbol',
@@ -484,12 +485,13 @@ function parseSymbol(el: Element, ctx: ParseContext): SymbolNode {
     preserveAspectRatio: el.getAttribute('preserveAspectRatio') ?? undefined,
     children: parseChildren(el, ctx),
     style: parseAppearance(resolved, el),
-    preservation: buildPreservationMeta({ element: el, editabilityLevel: 2, knownAttrs: SYMBOL_ATTRS }),
+    preservation: buildPreservationMeta({ element: el, editabilityLevel: 2, knownAttrs: SYMBOL_ATTRS, ctx }),
   }
 }
 
 function parseClipPath(el: Element, ctx: ParseContext): ClipPathNode {
   const id = getNodeId(el)
+  ctx.hasLevel2Nodes = true
   return {
     id,
     type: 'clipPath',
@@ -498,12 +500,13 @@ function parseClipPath(el: Element, ctx: ParseContext): ClipPathNode {
     clipPathUnits: (el.getAttribute('clipPathUnits') as ClipPathNode['clipPathUnits']) ?? undefined,
     children: parseChildren(el, ctx),
     transform: parseTransform(el.getAttribute('transform'), ctx, id),
-    preservation: buildPreservationMeta({ element: el, editabilityLevel: 2, knownAttrs: CLIPPATH_ATTRS }),
+    preservation: buildPreservationMeta({ element: el, editabilityLevel: 2, knownAttrs: CLIPPATH_ATTRS, ctx }),
   }
 }
 
 function parseMask(el: Element, ctx: ParseContext): MaskNode {
   const id = getNodeId(el)
+  ctx.hasLevel2Nodes = true
   const xStr = el.getAttribute('x')
   const yStr = el.getAttribute('y')
   const wStr = el.getAttribute('width')
@@ -520,12 +523,13 @@ function parseMask(el: Element, ctx: ParseContext): MaskNode {
     width: wStr != null ? parseFloat(wStr) : undefined,
     height: hStr != null ? parseFloat(hStr) : undefined,
     children: parseChildren(el, ctx),
-    preservation: buildPreservationMeta({ element: el, editabilityLevel: 2, knownAttrs: MASK_ATTRS }),
+    preservation: buildPreservationMeta({ element: el, editabilityLevel: 2, knownAttrs: MASK_ATTRS, ctx }),
   }
 }
 
 function parseMarkerNode(el: Element, ctx: ParseContext): MarkerNode {
   const id = getNodeId(el)
+  ctx.hasLevel2Nodes = true
   const resolved = resolveElementStyle(el, ctx)
 
   const parseCoord = (v: string | null): number | string | undefined => {
@@ -549,7 +553,7 @@ function parseMarkerNode(el: Element, ctx: ParseContext): MarkerNode {
     preserveAspectRatio: el.getAttribute('preserveAspectRatio') ?? undefined,
     children: parseChildren(el, ctx),
     style: parseAppearance(resolved, el),
-    preservation: buildPreservationMeta({ element: el, editabilityLevel: 2, knownAttrs: MARKER_ATTRS }),
+    preservation: buildPreservationMeta({ element: el, editabilityLevel: 2, knownAttrs: MARKER_ATTRS, ctx }),
   }
 }
 
@@ -583,12 +587,14 @@ function parseForeignObject(el: Element, ctx: ParseContext): ForeignObjectNode {
       knownAttrs: new Set(['id', 'x', 'y', 'width', 'height']),
       diagnosticIds: [diagId],
       captureRawChildren: false, // rawXml is handled above
+      ctx,
     }),
   }
 }
 
 function parseAnchor(el: Element, ctx: ParseContext): ANode {
   const id = getNodeId(el)
+  ctx.hasLevel2Nodes = true
   const resolved = resolveElementStyle(el, ctx)
   const href = el.getAttribute('href') ??
     el.getAttributeNS('http://www.w3.org/1999/xlink', 'href') ??
@@ -603,12 +609,13 @@ function parseAnchor(el: Element, ctx: ParseContext): ANode {
     children: parseChildren(el, ctx),
     style: parseAppearance(resolved, el),
     transform: parseTransform(el.getAttribute('transform'), ctx, id),
-    preservation: buildPreservationMeta({ element: el, editabilityLevel: 2, knownAttrs: A_ATTRS }),
+    preservation: buildPreservationMeta({ element: el, editabilityLevel: 2, knownAttrs: A_ATTRS, ctx }),
   }
 }
 
 function parseSwitchNode(el: Element, ctx: ParseContext): SwitchNode {
   const id = getNodeId(el)
+  ctx.hasLevel2Nodes = true
   const resolved = resolveElementStyle(el, ctx)
   return {
     id,
@@ -616,12 +623,13 @@ function parseSwitchNode(el: Element, ctx: ParseContext): SwitchNode {
     visible: isVisible(el, resolved),
     locked: false,
     children: parseChildren(el, ctx),
-    preservation: buildPreservationMeta({ element: el, editabilityLevel: 2, knownAttrs: SWITCH_ATTRS }),
+    preservation: buildPreservationMeta({ element: el, editabilityLevel: 2, knownAttrs: SWITCH_ATTRS, ctx }),
   }
 }
 
 function parseStyleNode(el: Element, ctx: ParseContext): StyleNode {
   const id = getNodeId(el)
+  ctx.hasLevel2Nodes = true
   return {
     id,
     type: 'style',
@@ -629,12 +637,13 @@ function parseStyleNode(el: Element, ctx: ParseContext): StyleNode {
     locked: false,
     cssText: el.textContent ?? '',
     mediaQuery: el.getAttribute('media') ?? undefined,
-    preservation: buildPreservationMeta({ element: el, editabilityLevel: 2, knownAttrs: STYLE_ATTRS }),
+    preservation: buildPreservationMeta({ element: el, editabilityLevel: 2, knownAttrs: STYLE_ATTRS, ctx }),
   }
 }
 
 function parseImage(el: Element, ctx: ParseContext): ImageNode {
   const id = getNodeId(el)
+  ctx.hasLevel2Nodes = true
   const resolved = resolveElementStyle(el, ctx)
   const href = resolveHref(el) ??
     el.getAttribute('href') ??
@@ -652,12 +661,13 @@ function parseImage(el: Element, ctx: ParseContext): ImageNode {
     href,
     preserveAspectRatio: el.getAttribute('preserveAspectRatio') ?? undefined,
     transform: parseTransform(el.getAttribute('transform'), ctx, id),
-    preservation: buildPreservationMeta({ element: el, editabilityLevel: 2, knownAttrs: IMAGE_ATTRS }),
+    preservation: buildPreservationMeta({ element: el, editabilityLevel: 2, knownAttrs: IMAGE_ATTRS, ctx }),
   }
 }
 
 function parseUse(el: Element, ctx: ParseContext): UseNode {
   const id = getNodeId(el)
+  ctx.hasLevel2Nodes = true
   const resolved = resolveElementStyle(el, ctx)
   const href = resolveHref(el) ?? ''
 
@@ -678,7 +688,7 @@ function parseUse(el: Element, ctx: ParseContext): UseNode {
     height: hStr != null ? parseFloat(hStr) : undefined,
     style: parseAppearance(resolved, el),
     transform: parseTransform(el.getAttribute('transform'), ctx, id),
-    preservation: buildPreservationMeta({ element: el, editabilityLevel: 2, knownAttrs: USE_ATTRS }),
+    preservation: buildPreservationMeta({ element: el, editabilityLevel: 2, knownAttrs: USE_ATTRS, ctx }),
   }
 }
 

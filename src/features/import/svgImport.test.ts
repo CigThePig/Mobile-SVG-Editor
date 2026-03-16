@@ -489,3 +489,54 @@ describe('parseSvgString — idRegistry', () => {
     expect(result.doc.idRegistry?.['c1']).toBe('circle')
   })
 })
+
+// ── Fidelity tier regression tests ───────────────────────────────────────────
+// These tests guard against the bugs where calculateFidelityTier would return
+// Tier 1 for documents that should use round-trip (Mode B) serialization.
+
+describe('parseSvgString — fidelity tier for Level-2 elements', () => {
+  it('sets fidelityTier to 2 for document with only <text> elements (no style blocks)', () => {
+    const result = parseSvgString(svg(`
+      <text x="10" y="30" font-size="16">Hello World</text>
+    `))
+    expect(result.fidelityTier).toBeGreaterThanOrEqual(2)
+    expect(result.doc.serializationMode).toBe('roundtrip')
+  })
+
+  it('sets fidelityTier to 2 for document with <use> element', () => {
+    const result = parseSvgString(svg(`
+      <defs>
+        <symbol id="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/></symbol>
+      </defs>
+      <use href="#icon" x="0" y="0" width="24" height="24"/>
+    `))
+    expect(result.fidelityTier).toBeGreaterThanOrEqual(2)
+    expect(result.doc.serializationMode).toBe('roundtrip')
+  })
+
+  it('sets fidelityTier to 2 for document with <image> element', () => {
+    const result = parseSvgString(svg(`
+      <image x="0" y="0" width="100" height="100" href="data:image/png;base64,abc"/>
+    `))
+    expect(result.fidelityTier).toBeGreaterThanOrEqual(2)
+    expect(result.doc.serializationMode).toBe('roundtrip')
+  })
+
+  it('sets fidelityTier to 2 for Level-1 node with unknown (raw) attributes', () => {
+    const result = parseSvgString(svg(`
+      <rect id="r1" x="0" y="0" width="50" height="50" inkscape:label="My Shape"/>
+    `, 'xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"'))
+    expect(result.fidelityTier).toBeGreaterThanOrEqual(2)
+    expect(result.doc.serializationMode).toBe('roundtrip')
+  })
+
+  it('keeps fidelityTier 1 for clean shapes-only document', () => {
+    const result = parseSvgString(svg(`
+      <rect id="r1" x="0" y="0" width="50" height="50" fill="red"/>
+      <circle id="c1" cx="60" cy="60" r="20" fill="blue"/>
+      <path id="p1" d="M0,0 L100,100 Z"/>
+    `))
+    expect(result.fidelityTier).toBe(1)
+    expect(result.doc.serializationMode).toBe('normalized')
+  })
+})

@@ -82,5 +82,7 @@ export function createParseContext(sourceSvg: string): ParseContext {
     hasUnknownElements: false,
     hasStyleBlocks: false,
     hasDisplayOnlyContent: false,
+    hasLevel2Nodes: false,
+    hasRawAttributes: false,
   }
 }

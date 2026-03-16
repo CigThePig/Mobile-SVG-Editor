@@ -21,6 +21,7 @@ import { boundsIntersect, collectSelectableNodes, getNodeBounds, normalizeBounds
 import { saveDocument } from '@/db/dexie/queries'
 import { useEditorStore } from '@/stores/editorStore'
 import { useHistoryStore } from '@/stores/historyStore'
+import { useSettingsStore } from '@/stores/settingsStore'
 import { runCommand } from '@/features/documents/services/commandRunner'
 import { parsePathD, serializePathD } from '@/features/path/utils/pathGeometry'
 import { snapPoint, screenThresholdToDocSpace } from '@/features/path/utils/snapUtils'
@@ -703,7 +704,7 @@ export function CanvasArtworkLayer() {
           const zoom = v.zoom
           // Snap the handle endpoint to grid/guides when snap is enabled
           const snappedPt = v.snapEnabled
-            ? snapPoint(point, [], v.snapConfig, screenThresholdToDocSpace(8, zoom), v.guides)
+            ? snapPoint(point, [], v.snapConfig, screenThresholdToDocSpace(useSettingsStore.getState().snapThresholdPx, zoom), v.guides)
             : point
           const dx = snappedPt.x - drag.anchorDocPt.x
           const dy = snappedPt.y - drag.anchorDocPt.y

@@ -22,6 +22,7 @@ import {
   addPointOnSegment
 } from '../utils/pathOperations'
 import { snapPoint, boundsToSnapCandidates, screenThresholdToDocSpace } from '../utils/snapUtils'
+import { useSettingsStore } from '@/stores/settingsStore'
 import type { SnapCandidate } from '../utils/snapUtils'
 import type { SvgDocument } from '@/model/document/documentTypes'
 import type { PathNode } from '@/model/nodes/nodeTypes'
@@ -150,7 +151,7 @@ export function PathEditOverlay({ svgRef }: PathEditOverlayProps) {
     addSnapCandidates(document.root)
   }
 
-  const snapThreshold = screenThresholdToDocSpace(8, zoom)
+  const snapThreshold = screenThresholdToDocSpace(useSettingsStore.getState().snapThresholdPx, zoom)
   const segmentHitThreshold = screenThresholdToDocSpace(12, zoom)
 
   // Parse current path

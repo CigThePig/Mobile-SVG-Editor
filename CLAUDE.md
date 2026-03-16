@@ -42,7 +42,7 @@ Wave 1 — Architectural Truth Layer
 | 1 | Replace the core SVG model with a complete document model | ✅ Done |
 | 2 | Build the loss-aware raw SVG DOM import engine | ✅ Done |
 | 3 | Build the round-trip-safe serialization engine | ✅ Done |
-| 4 | Build the ID and reference graph engine | ⬜ Pending |
+| 4 | Build the ID and reference graph engine | ✅ Done |
 
 Wave 2 — Real Usable Core
 
@@ -125,6 +125,15 @@ src/
                 svgSerializeRoundTrip.ts  — Mode B: round-trip-safe output (diff-match-patch)
                 svgSerializer.ts          — backward-compat shim (re-exports unified API)
     import/     Phase 2: Loss-aware SVG DOM import engine
+    references/ Phase 4: ID and reference graph engine
+                index.ts                  — public barrel export
+                idRegistry.ts             — IdRegistry type + buildIdRegistry(), rebuildDocIdRegistry(), generateUniqueId()
+                referenceGraph.ts         — ReferenceGraph, ReferenceEdge, ReferenceSlot, buildReferenceGraph()
+                referenceQueries.ts       — read-only query API (findReferencesTo, canSafelyDelete, detectCircularRefs, …)
+                renameResourceCommand.ts  — renameId() — atomic id rename across tree + resources
+                referenceCommands.ts      — EditorCommand wrappers: renameIdCommand, relinkReferenceCommand, removeOrphanedResourcesCommand
+                repairReferences.ts       — findBrokenReferences(), repairAllBrokenReferences(), repairAllBrokenReferencesCommand
+                referenceGraph.test.ts    — 46 unit tests covering all subsystems
   model/        Core data model (document, nodes, resources, history, selection, view, utils)
                 index.ts — barrel export for the full model layer
                 nodes/nodeTypeGuards.ts — type guard functions for node discrimination

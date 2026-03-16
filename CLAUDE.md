@@ -41,7 +41,7 @@ Wave 1 — Architectural Truth Layer
 | 0 | Project reset and architectural contract | ✅ Done |
 | 1 | Replace the core SVG model with a complete document model | ✅ Done |
 | 2 | Build the loss-aware raw SVG DOM import engine | ✅ Done |
-| 3 | Build the round-trip-safe serialization engine | ⬜ Pending |
+| 3 | Build the round-trip-safe serialization engine | ✅ Done |
 | 4 | Build the ID and reference graph engine | ⬜ Pending |
 
 Wave 2 — Real Usable Core
@@ -96,13 +96,13 @@ These rules apply to every phase. Do not violate them.
 
 These are not yet installed. Add them when the relevant phase begins.
 
-| Package | Type | First needed |
-|---|---|---|
-| `css-tree` | runtime | Phase 2 |
-| `@tanstack/react-virtual` | runtime | Phase 9 |
-| `pixelmatch` | dev | Phase 20 |
-| `fast-check` | dev | Phase 20 |
-| `@types/diff-match-patch` | dev (optional) | Phase 7 |
+| Package | Type | First needed | Status |
+|---|---|---|---|
+| `css-tree` | runtime | Phase 2 | ✅ Installed (Phase 3) |
+| `@tanstack/react-virtual` | runtime | Phase 9 | ⬜ Not yet |
+| `pixelmatch` | dev | Phase 20 | ⬜ Not yet |
+| `fast-check` | dev | Phase 20 | ⬜ Not yet |
+| `@types/diff-match-patch` | dev (optional) | Phase 7 | ⬜ Not yet |
 
 ---
 
@@ -114,10 +114,22 @@ src/
   components/   Shared UI components
   db/           Dexie-based persistence
   features/     Feature modules (canvas, documents, export, inspector, layers, path, resources, selection, snapshots, workspace)
+    export/     Phase 3: Round-trip-safe serialization engine
+                index.ts                  — unified entry: serializeSvgDocument()
+                svgSerializeUtils.ts      — shared XML helpers, attribute builders
+                svgSerializeTransforms.ts — TransformModel → SVG transform string
+                svgSerializeText.ts       — text/tspan/textPath serialization
+                svgSerializeStyles.ts     — CSS style block serialization (css-tree)
+                svgSerializeResources.ts  — gradient/filter/pattern/marker serialization
+                svgSerializeNormalized.ts — Mode A: normalized output (prettier optional)
+                svgSerializeRoundTrip.ts  — Mode B: round-trip-safe output (diff-match-patch)
+                svgSerializer.ts          — backward-compat shim (re-exports unified API)
+    import/     Phase 2: Loss-aware SVG DOM import engine
   model/        Core data model (document, nodes, resources, history, selection, view, utils)
                 index.ts — barrel export for the full model layer
                 nodes/nodeTypeGuards.ts — type guard functions for node discrimination
                 utils/nodeTraversal.ts — tree traversal and immutable mapping utilities
+                document/documentTypes.ts — SvgDocument (includes sourceSvg for round-trip diff)
   pages/        Page-level components (editor, export, home, settings)
   stores/       Zustand/Jotai/Valtio state stores
 docs/

@@ -90,6 +90,9 @@ export function parseSvgString(svgString: string, title?: string): SvgImportResu
   // Finalize: set fidelityTier, serializationMode, idRegistry, namespaces, diagnostics
   const finalDoc = finalizeDocument(importedDoc, ctx)
 
+  // Preserve original source for round-trip diff support (Phase 3)
+  finalDoc.sourceSvg = svgString
+
   return buildImportResult(finalDoc, ctx)
 }
 

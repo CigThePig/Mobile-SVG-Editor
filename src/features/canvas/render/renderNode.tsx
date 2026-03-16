@@ -135,9 +135,14 @@ export function renderNode(node: SvgNode, ctx: RenderContext): ReactNode {
     onPointerDown(e, node.id)
   }
 
-  // Common props shared by most leaf elements
+  // Common props shared by most leaf elements.
+  // `id` is always emitted so that <use href="#id"> references resolve in the DOM.
+  // `node.attributes` carries pass-through attributes (aria-*, data-*, xml:*, etc.)
+  // from imported SVG that must be preserved verbatim.
   const commonProps = {
     key: node.id,
+    id: node.id,
+    ...(node.attributes ?? {}),
     onPointerDown: handlePointerDown,
     style: { cursor: 'pointer' },
     ...(opacity != null && { opacity }),
@@ -266,6 +271,8 @@ export function renderNode(node: SvgNode, ctx: RenderContext): ReactNode {
       return (
         <g
           key={node.id}
+          id={node.id}
+          {...(n.attributes ?? {})}
           transform={transformToSvgString(n.transform)}
           onPointerDown={handlePointerDown}
           style={{ cursor: 'pointer', ...(sp.style ?? {}) }}

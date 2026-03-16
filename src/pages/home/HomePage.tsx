@@ -10,10 +10,16 @@ import type { SvgDocument } from '@/model/document/documentTypes'
 
 function DocumentThumbnail({ doc }: { doc: SvgDocument }) {
   const html = useMemo(() => {
+    const rootChildren = Array.isArray(doc.root.children) ? doc.root.children : []
+
     const truncated: SvgDocument = {
       ...doc,
-      root: { ...doc.root, children: doc.root.children.slice(0, 30) }
+      root: {
+        ...doc.root,
+        children: rootChildren.slice(0, 30)
+      }
     }
+
     const svgString = serializeDocumentToSvg(truncated)
     return svgString
       .replace(/^<\?xml[^?]*\?>\n?/, '')

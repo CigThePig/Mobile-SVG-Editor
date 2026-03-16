@@ -116,12 +116,12 @@
     "@types/react": "latest",
     "@types/react-dom": "latest",
     "@vitejs/plugin-react": "^5.2.0",
-    "happy-dom": "latest",
+    "happy-dom": "^20.8.4",
     "jsdom": "latest",
     "msw": "latest",
     "playwright": "latest",
     "typescript": "latest",
     "vite": "^7.0.0",
-    "vitest": "latest"
+    "vitest": "^4.1.0"
   }
 }

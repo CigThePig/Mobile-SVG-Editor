@@ -28,6 +28,12 @@ import {
   applyGradientToNodeCommand
 } from './resourceCommands'
 import {
+  renameIdCommand,
+  relinkReferenceCommand,
+  removeOrphanedResourcesCommand,
+  repairAllBrokenReferencesCommand,
+} from '@/features/references'
+import {
   convertToPathCommand,
   movePointCommand,
   moveHandleCommand,
@@ -86,5 +92,10 @@ export function bootstrapCommands() {
   registerCommand(booleanExcludeCommand)
   registerCommand(alignNodesCommand)
   registerCommand(distributeNodesCommand)
+  // Reference / ID graph commands (Phase 4)
+  registerCommand(renameIdCommand)
+  registerCommand(relinkReferenceCommand)
+  registerCommand(removeOrphanedResourcesCommand)
+  registerCommand(repairAllBrokenReferencesCommand)
   bootstrapped = true
 }

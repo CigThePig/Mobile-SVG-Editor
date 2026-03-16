@@ -22,6 +22,7 @@ function makeDoc(children: RootNode['children']): SvgDocument {
       filters: [],
       markers: [],
       symbols: [],
+      styleBlocks: [],
       components: [],
       textStyles: [],
       exportSlices: []

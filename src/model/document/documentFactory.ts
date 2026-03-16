@@ -1,6 +1,6 @@
 import { nanoid } from 'nanoid'
 import type { SvgDocument } from './documentTypes'
-import type { RootNode } from '@/model/nodes/nodeTypes'
+import type { DefsNode, RootNode } from '@/model/nodes/nodeTypes'
 import type { ResourceStore } from '@/model/resources/resourceTypes'
 
 export function createEmptyResources(): ResourceStore {
@@ -11,6 +11,7 @@ export function createEmptyResources(): ResourceStore {
     filters: [],
     markers: [],
     symbols: [],
+    styleBlocks: [],
     components: [],
     textStyles: [],
     exportSlices: []
@@ -21,6 +22,16 @@ export function createEmptyRoot(): RootNode {
   return {
     id: nanoid(),
     type: 'root',
+    visible: true,
+    locked: false,
+    children: []
+  }
+}
+
+export function createDefsNode(): DefsNode {
+  return {
+    id: nanoid(),
+    type: 'defs',
     visible: true,
     locked: false,
     children: []
@@ -51,6 +62,8 @@ export function createEmptyDocument(title = 'Untitled SVG'): SvgDocument {
       snapEnabled: true
     },
     snapshotIds: [],
-    version: 1
+    version: 1,
+    fidelityTier: 1,
+    serializationMode: 'normalized'
   }
 }

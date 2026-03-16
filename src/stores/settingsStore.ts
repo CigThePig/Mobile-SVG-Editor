@@ -1,3 +1,7 @@
+// Settings sync decision (Phase 8): settingsStore intentionally persists to
+// localStorage rather than Dexie/IndexedDB. Settings are device-local preferences
+// (grid size, snap thresholds, etc.) that don't require cross-browser sync.
+// Documents and guides are persisted per-document in Dexie via PerDocumentEditorState.
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 

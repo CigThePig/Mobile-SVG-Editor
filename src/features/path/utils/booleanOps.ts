@@ -192,11 +192,26 @@ async function performBooleanOpPaper(nodes: SvgNode[], op: BooleanOpType): Promi
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const paperPaths: any[] = pathStrings.map((d) => new paper.Path({ pathData: d }))
 
-  let result = paperPaths[0]
-  for (let i = 1; i < paperPaths.length; i++) {
-    const next = applyPaperBoolOp(result, paperPaths[i], op, paper)
-    if (result !== paperPaths[0]) result.remove()
-    result = next
+  let result: typeof paperPaths[0]
+
+  if (op === 'subtract' && paperPaths.length > 2) {
+    // Standardized semantics: first shape minus the union of all remaining shapes.
+    // This matches the polygon-clipping fallback and Figma/Illustrator behavior.
+    let clipUnion = paperPaths[1]
+    for (let i = 2; i < paperPaths.length; i++) {
+      const next = clipUnion.unite(paperPaths[i])
+      clipUnion.remove()
+      clipUnion = next
+    }
+    result = paperPaths[0].subtract(clipUnion)
+    clipUnion.remove()
+  } else {
+    result = paperPaths[0]
+    for (let i = 1; i < paperPaths.length; i++) {
+      const next = applyPaperBoolOp(result, paperPaths[i], op, paper)
+      if (result !== paperPaths[0]) result.remove()
+      result = next
+    }
   }
 
   // Clean up inputs

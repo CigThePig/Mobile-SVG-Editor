@@ -5,7 +5,7 @@ import { collectResources } from './svgParseResources'
 import { parseSvgRootMetadata, collectAllIds } from './svgParseMetadata'
 import { buildRootNode } from './svgParseNodes'
 import { scanReferences, repairDuplicateIds } from './svgParseReferences'
-import { finalizeDocument } from './svgImportNormalize'
+import { finalizeDocument, countEditabilityLevels } from './svgImportNormalize'
 import { createParseContext } from './svgImportDiagnostics'
 import { DIAG } from './svgImportTypes'
 import { emitError } from './svgImportDiagnostics'
@@ -108,8 +108,7 @@ function buildImportResult(
   const fidelityTier = doc.fidelityTier ?? 1
 
   // Count editability levels from preservation metadata
-  const editabilityBreakdown: Record<1 | 2 | 3 | 4, number> = { 1: 0, 2: 0, 3: 0, 4: 0 }
-  countNodeEditabilityLevels(doc.root, editabilityBreakdown)
+  const editabilityBreakdown = countEditabilityLevels(doc)
 
   return {
     doc,
@@ -118,21 +117,6 @@ function buildImportResult(
     errorCount,
     fidelityTier,
     editabilityBreakdown,
-  }
-}
-
-function countNodeEditabilityLevels(
-  node: import('@/model/nodes/nodeTypes').SvgNode,
-  counts: Record<1 | 2 | 3 | 4, number>
-): void {
-  const level = node.preservation?.editabilityLevel
-  if (level != null && level >= 1 && level <= 4) {
-    counts[level as 1 | 2 | 3 | 4]++
-  }
-  if ('children' in node && node.children) {
-    for (const child of node.children) {
-      countNodeEditabilityLevels(child, counts)
-    }
   }
 }
 

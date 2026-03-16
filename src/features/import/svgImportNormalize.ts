@@ -16,11 +16,14 @@ export function calculateFidelityTier(ctx: ParseContext): 1 | 2 | 3 {
   if (ctx.hasPreservedContent || ctx.hasUnknownElements || ctx.hasDisplayOnlyContent) {
     return 3
   }
-  if (ctx.hasStyleBlocks || ctx.resources.filters.length > 0 || ctx.resources.patterns.length > 0) {
-    return 2
-  }
-  // Check if any text nodes are present (Level 2)
-  if (ctx.resources.symbols.length > 0) {
+  if (
+    ctx.hasStyleBlocks ||
+    ctx.resources.filters.length > 0 ||
+    ctx.resources.patterns.length > 0 ||
+    ctx.resources.symbols.length > 0 || // symbol resources (Level 2)
+    ctx.hasLevel2Nodes ||               // Level-2 tree nodes (text, use, image, etc.)
+    ctx.hasRawAttributes                // any unknown attributes preserved on any node
+  ) {
     return 2
   }
   return 1

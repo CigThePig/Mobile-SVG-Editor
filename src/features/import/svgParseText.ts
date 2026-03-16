@@ -28,6 +28,7 @@ const TEXT_KNOWN_ATTRS = new Set([
  * Recursively parses `<tspan>` and `<textPath>` children.
  */
 export function parseTextElement(el: Element, ctx: ParseContext): TextNode {
+  ctx.hasLevel2Nodes = true
   const id = el.getAttribute('id') ?? nanoid(8)
   const resolvedStyle = resolveElementStyle(el, ctx)
 
@@ -67,6 +68,7 @@ export function parseTextElement(el: Element, ctx: ParseContext): TextNode {
     element: el,
     editabilityLevel: getEditabilityLevel(el.localName, el.namespaceURI),
     knownAttrs: TEXT_KNOWN_ATTRS,
+    ctx,
   })
 
   const node: TextNode = {
@@ -130,6 +132,7 @@ export function parseTspanElement(el: Element, ctx: ParseContext): TspanNode | n
     element: el,
     editabilityLevel: 2,
     knownAttrs: TSPAN_KNOWN_ATTRS,
+    ctx,
   })
 
   const node: TspanNode = {
@@ -200,6 +203,7 @@ export function parseTextPathElement(el: Element, ctx: ParseContext): TextPathNo
     element: el,
     editabilityLevel: 2,
     knownAttrs: TEXTPATH_KNOWN_ATTRS,
+    ctx,
   })
 
   const node: TextPathNode = {

@@ -126,11 +126,17 @@ export interface PreservationMetaOptions {
   /** If true, serialize all element children as rawChildren */
   captureRawChildren?: boolean
   sourceOffset?: number
+  /** ParseContext to update with hasRawAttributes flag when unknown attrs are found */
+  ctx?: { hasRawAttributes: boolean }
 }
 
 export function buildPreservationMeta(opts: PreservationMetaOptions): PreservationMeta {
   const rawAttributes = collectRawAttributes(opts.element, opts.knownAttrs)
   const rawChildren = opts.captureRawChildren ? serializeChildren(opts.element) || undefined : undefined
+
+  if (rawAttributes !== undefined && opts.ctx) {
+    opts.ctx.hasRawAttributes = true
+  }
 
   return {
     sourceElementName: opts.element.localName,

@@ -48,6 +48,12 @@ export interface ParseContext {
 
   /** Set to true if any Level 4 (display-only / SMIL) element was encountered */
   hasDisplayOnlyContent: boolean
+
+  /** Set to true if any Level 2 (partial-support) tree node was encountered (text, use, image, etc.) */
+  hasLevel2Nodes: boolean
+
+  /** Set to true if any node carries rawAttributes (unknown/custom attributes) */
+  hasRawAttributes: boolean
 }
 
 // ── Import result ─────────────────────────────────────────────────────────────

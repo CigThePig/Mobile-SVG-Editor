@@ -1,7 +1,9 @@
 import type { SvgDocument } from '@/model/document/documentTypes'
 import type {
+  ANode,
   CircleNode,
   EllipseNode,
+  ForeignObjectNode,
   GroupNode,
   ImageNode,
   LineNode,
@@ -12,7 +14,9 @@ import type {
   RootNode,
   StarNode,
   SvgNode,
-  TextNode
+  SwitchNode,
+  TextNode,
+  UseNode
 } from '@/model/nodes/nodeTypes'
 import { getNodeBounds, getLocalNodeBounds, normalizeBounds, type NodeBounds } from '@/features/selection/utils/nodeBounds'
 
@@ -217,6 +221,32 @@ function moveNode(node: SvgNode, dx: number, dy: number): SvgNode {
       const n = node as ImageNode
       return { ...n, x: n.x + dx, y: n.y + dy }
     }
+    case 'use': {
+      const n = node as UseNode
+      if (n.x != null || n.y != null) {
+        return { ...n, x: (n.x ?? 0) + dx, y: (n.y ?? 0) + dy }
+      }
+      return {
+        ...n,
+        transform: {
+          ...n.transform,
+          translateX: (n.transform?.translateX ?? 0) + dx,
+          translateY: (n.transform?.translateY ?? 0) + dy
+        }
+      }
+    }
+    case 'foreignObject': {
+      const n = node as ForeignObjectNode
+      return { ...n, x: (n.x ?? 0) + dx, y: (n.y ?? 0) + dy }
+    }
+    case 'a': {
+      const n = node as ANode
+      return { ...n, children: (n.children ?? []).map((child) => moveNode(child, dx, dy)) }
+    }
+    case 'switch': {
+      const n = node as SwitchNode
+      return { ...n, children: (n.children ?? []).map((child) => moveNode(child, dx, dy)) }
+    }
     case 'group': {
       const n = node as GroupNode
       // If the group has a rotation transform, move via translateX/Y so the drag
@@ -239,6 +269,15 @@ function moveNode(node: SvgNode, dx: number, dy: number): SvgNode {
       const n = node as RootNode
       return { ...n, children: (n.children ?? []).map((child) => moveNode(child, dx, dy)) }
     }
+    // Structural nodes are not directly moved
+    case 'defs':
+    case 'symbol':
+    case 'clipPath':
+    case 'mask':
+    case 'marker':
+    case 'style':
+    case 'tspan':
+    case 'textPath':
     default:
       return node
   }
@@ -335,6 +374,32 @@ function resizeNode(node: SvgNode, oldBounds: NodeBounds, targetBounds: NodeBoun
       const resized = { ...n, x: newBounds.x, y: newBounds.y, width: newBounds.width, height: newBounds.height }
       return syncRotationPivot(resized, newBounds.x + newBounds.width / 2, newBounds.y + newBounds.height / 2)
     }
+    case 'foreignObject': {
+      const n = node as ForeignObjectNode
+      return { ...n, x: newBounds.x, y: newBounds.y, width: newBounds.width, height: newBounds.height }
+    }
+    case 'use': {
+      const n = node as UseNode
+      return { ...n, x: newBounds.x, y: newBounds.y, width: newBounds.width, height: newBounds.height }
+    }
+    case 'a':
+    case 'switch': {
+      const n = node as ANode | SwitchNode
+      return {
+        ...n,
+        children: (n.children ?? []).map((child) => {
+          const childBounds = getNodeBounds(child)
+          if (!childBounds) return child
+          const mappedBounds = normalizeBounds({
+            x: scaleX(childBounds.x, oldBounds, newBounds),
+            y: scaleY(childBounds.y, oldBounds, newBounds),
+            width: (childBounds.width / Math.max(1, oldBounds.width)) * newBounds.width,
+            height: (childBounds.height / Math.max(1, oldBounds.height)) * newBounds.height
+          })
+          return resizeNode(child, childBounds, mappedBounds)
+        })
+      }
+    }
     case 'group': {
       const n = node as GroupNode
       return {
@@ -369,6 +434,15 @@ function resizeNode(node: SvgNode, oldBounds: NodeBounds, targetBounds: NodeBoun
         })
       }
     }
+    // Structural nodes are not directly resized
+    case 'defs':
+    case 'symbol':
+    case 'clipPath':
+    case 'mask':
+    case 'marker':
+    case 'style':
+    case 'tspan':
+    case 'textPath':
     default:
       return node
   }

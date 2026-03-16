@@ -2,6 +2,7 @@ import { getPathBBox } from 'svg-path-commander'
 import type {
   CircleNode,
   EllipseNode,
+  ForeignObjectNode,
   LineNode,
   PathNode,
   PolygonNode,
@@ -10,7 +11,8 @@ import type {
   StarNode,
   SvgNode,
   TextNode,
-  TransformModel
+  TransformModel,
+  UseNode
 } from '@/model/nodes/nodeTypes'
 
 export interface NodeBounds {
@@ -270,11 +272,41 @@ function getBaseNodeBounds(node: SvgNode): NodeBounds | null {
       const width = Math.max(40, n.content.length * fontSize * 0.6)
       return { x: n.x, y: n.y - fontSize, width, height: fontSize * 1.2 }
     }
+    case 'image': {
+      const n = node as { x: number; y: number; width: number; height: number }
+      return { x: n.x, y: n.y, width: n.width, height: n.height }
+    }
+    case 'use': {
+      const n = node as UseNode
+      if (n.width != null && n.height != null && n.x != null && n.y != null) {
+        return { x: n.x, y: n.y, width: n.width, height: n.height }
+      }
+      return null
+    }
+    case 'foreignObject': {
+      const n = node as ForeignObjectNode
+      if (n.width != null && n.height != null) {
+        return { x: n.x ?? 0, y: n.y ?? 0, width: n.width, height: n.height }
+      }
+      return null
+    }
     case 'group':
-    case 'root': {
+    case 'root':
+    case 'a':
+    case 'switch': {
       const childBounds = (node.children ?? []).map(getNodeBounds).filter(Boolean) as NodeBounds[]
       return combineBounds(childBounds)
     }
+    // Non-renderable / structural nodes — not selectable in visual mode
+    case 'defs':
+    case 'symbol':
+    case 'clipPath':
+    case 'mask':
+    case 'marker':
+    case 'style':
+    case 'tspan':
+    case 'textPath':
+      return null
     default:
       return null
   }

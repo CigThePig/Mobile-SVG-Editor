@@ -39,7 +39,7 @@ Wave 1 — Architectural Truth Layer
 | Phase | Title | Status |
 |---|---|---|
 | 0 | Project reset and architectural contract | ✅ Done |
-| 1 | Replace the core SVG model with a complete document model | ⬜ Pending |
+| 1 | Replace the core SVG model with a complete document model | ✅ Done |
 | 2 | Build the loss-aware raw SVG DOM import engine | ⬜ Pending |
 | 3 | Build the round-trip-safe serialization engine | ⬜ Pending |
 | 4 | Build the ID and reference graph engine | ⬜ Pending |
@@ -114,7 +114,10 @@ src/
   components/   Shared UI components
   db/           Dexie-based persistence
   features/     Feature modules (canvas, documents, export, inspector, layers, path, resources, selection, snapshots, workspace)
-  model/        Core data model (document, nodes, resources, history, selection, view)
+  model/        Core data model (document, nodes, resources, history, selection, view, utils)
+                index.ts — barrel export for the full model layer
+                nodes/nodeTypeGuards.ts — type guard functions for node discrimination
+                utils/nodeTraversal.ts — tree traversal and immutable mapping utilities
   pages/        Page-level components (editor, export, home, settings)
   stores/       Zustand/Jotai/Valtio state stores
 docs/

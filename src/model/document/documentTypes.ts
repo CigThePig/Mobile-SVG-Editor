@@ -78,6 +78,14 @@ export interface SvgDocument {
    * Example: { 'xlink': 'http://www.w3.org/1999/xlink', 'dc': 'http://purl.org/dc/elements/1.1/' }
    */
   namespaces?: Record<string, string>
+
+  /**
+   * Original SVG source string, stored during import for round-trip diff support.
+   * Used by the round-trip serializer (Phase 3) to compute change summaries via
+   * diff-match-patch and to support source-visual sync (Phase 7).
+   * Not stored for editor-native documents.
+   */
+  sourceSvg?: string
 }
 
 // ── Supporting types ──────────────────────────────────────────────────────────

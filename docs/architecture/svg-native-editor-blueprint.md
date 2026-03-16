@@ -107,6 +107,43 @@ Performance, testing, and UX completeness.
 
 ---
 
+## Phase Implementation Status
+
+| Phase | Title | Status |
+|---|---|---|
+| Phase 0 | Project reset and architectural contract | ✅ Done |
+| Phase 1 | Replace the core SVG model with a complete document model | ✅ Done |
+| Phase 2 | Build the loss-aware raw SVG DOM import engine | ✅ Done |
+| Phase 3 | Build the round-trip-safe serialization engine | ✅ Done |
+
+### Phase 3 Implementation Notes (2026-03-16)
+
+The round-trip-safe serialization engine has been implemented in `src/features/export/`:
+
+**New modules:**
+- `svgSerializeUtils.ts` — shared XML helpers, paint/stroke serialization, `localFragRef()` for href restoration
+- `svgSerializeTransforms.ts` — `TransformModel` → SVG transform attribute string
+- `svgSerializeText.ts` — text/tspan/textPath serialization with preservation-aware attribute emission
+- `svgSerializeStyles.ts` — CSS style block serialization using css-tree for Mode A normalization
+- `svgSerializeResources.ts` — gradient/filter (always raw XML)/pattern/marker serialization
+- `svgSerializeNormalized.ts` — Mode A serializer with optional prettier formatting and svgo opt-in
+- `svgSerializeRoundTrip.ts` — Mode B serializer with Level-3 node reconstruction and diff-match-patch support
+- `index.ts` — unified `serializeSvgDocument(doc, opts?)` entry point
+
+**Key behaviors:**
+- `SvgDocument.sourceSvg` is now populated by the import engine for all imported documents (enables diff support)
+- Mode A respects `doc.serializationMode === 'normalized'`; Mode B respects `'roundtrip'`
+- Level-3 (Preserved-raw) nodes are reconstructed from `preservation.sourceElementName + rawAttributes + rawChildren`
+- Filter resources always emit their `rawXml` verbatim
+- Pattern/marker resources prefer `rawXml` if present, otherwise serialize children
+- Namespace declarations from `doc.namespaces` are preserved on the SVG root in Mode B
+- `localFragRef()` helper restores the `#` prefix that the import engine strips from local fragment IDs
+- `svgSerializer.ts` remains as a backward-compatible shim with `serializeDocumentToSvg` alias
+
+**Added dependency:** `css-tree` (runtime) — used for CSS normalization in Mode A style blocks
+
+---
+
 ## What This Contract Prevents
 
 - Building a model that can only represent editor-native shapes

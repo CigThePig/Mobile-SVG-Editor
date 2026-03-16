@@ -14,7 +14,7 @@ This README describes the **current state of the repo as it exists now**, includ
 
 The repo currently includes:
 
-- a working multi-page app flow: **Home → Editor → Export → Settings**
+- a working multi-page app: **Editor**, **Home**, **Export**, **Settings**, and a dormant **Inspect** page
 - Dexie-backed document persistence and snapshot persistence
 - a functional SVG editing canvas with pan, zoom, selection, transforms, and overlays
 - shape drawing, pen/path creation, text placement, image import, grouping, alignment, distribution, path conversion, and boolean ops
@@ -45,6 +45,10 @@ This is a working editor with a genuine core, not fake scaffolding. But it still
 
 ## Implemented app flow
 
+### Boot behavior
+
+The app always starts on the **Editor page** — the `NavigationContext` (`src/app/routing/NavigationContext.tsx`) defaults to `'editor'`. During app initialization, `AppProviders` (`src/app/providers/AppProviders.tsx`) calls `useBootstrapDocument` (`src/features/workspace/hooks/useBootstrapDocument.ts`), which loads the most recent Dexie document or creates a new untitled one. The user navigates to the Home page manually via the back arrow in the top bar.
+
 ### Home page
 
 `src/pages/home/HomePage.tsx`
@@ -53,16 +57,15 @@ The Home page is live and working.
 
 It currently supports:
 
-- listing recent documents from Dexie
+- listing up to 50 recent documents from Dexie
 - creating a new document
 - opening an existing document
-- deleting a document
-- deleting associated snapshots when a document is deleted
+- deleting a document (also deletes associated snapshots via `deleteDocument` in `src/db/dexie/queries.ts`)
 - showing a lightweight thumbnail preview
 
 Current limitation:
 
-- thumbnails only render a few basic node types and do **not** faithfully preview the full document
+- thumbnails only render `rect`, `ellipse`, and `circle` nodes from the top-level children (up to 6 nodes). Groups, paths, text, images, polygons, stars, and transforms are not rendered. Gradient fills fall back to a default blue color.
 
 ### Editor page
 
@@ -72,14 +75,16 @@ The Editor page is the main active surface of the repo.
 
 It currently renders:
 
-- top bar
-- canvas viewport
-- context action strip
-- bottom mode bar
-- layers panel
-- inspector sheet
+- top bar (`src/components/layout/EditorTopBar.tsx`)
+- canvas viewport (`src/features/canvas/components/CanvasViewport.tsx`)
+- context action strip (`src/components/layout/ContextActionStrip.tsx`)
+- bottom mode bar (`src/components/layout/EditorBottomBar.tsx`)
+- layers panel (`src/features/layers/components/LayersPanel.tsx`)
+- inspector sheet (`src/features/inspector/components/InspectorSheet.tsx`)
 
-It also preloads Paper.js during idle time so the first boolean operation is less likely to stall.
+It also preloads Paper.js during idle time (via `requestIdleCallback` or a 2-second timeout fallback) so the first boolean operation does not trigger a blocking network fetch.
+
+Only one settings value is applied at editor mount: `outlineModeDefault` is read from `settingsStore` and used to initialize the editor's outline mode via a `useEffect`.
 
 ### Export page
 
@@ -89,10 +94,11 @@ The Export page is live and working.
 
 It currently supports:
 
-- serializing the current document to SVG
+- serializing the current document to SVG via `serializeDocumentToSvg` (`src/features/export/svgSerializer.ts`)
+- rendering a live visual preview of the SVG
+- displaying a truncated SVG source preview
 - downloading the SVG file
 - copying SVG source to clipboard
-- previewing the generated source
 
 ### Settings page
 
@@ -102,18 +108,20 @@ The Settings page is live and reachable from the editor top bar.
 
 It currently exposes:
 
-- default grid size
-- snap threshold
-- angle snap
-- outline mode default
-- show guides toggle
-- show grid toggle
-- default export scale
-- destructive clear-all-documents action
+- default grid size (saved to `settingsStore` and also applied immediately to `editorStore`)
+- snap threshold (saved to `settingsStore`, but **not** used by snapping logic — see Known gaps)
+- angle snap degrees (saved to `settingsStore` and also applied immediately to `editorStore`)
+- outline mode default (saved to `settingsStore` and read at editor boot)
+- show guides toggle (directly mutates current `editorStore` view state, **not** saved to `settingsStore`)
+- show grid toggle (directly mutates current `editorStore` view state, **not** saved to `settingsStore`)
+- default export scale (saved to `settingsStore`, but **not** used by export flow — see Known gaps)
+- destructive clear-all-documents action (deletes both `documents` and `snapshots` tables)
+
+`settingsStore` (`src/stores/settingsStore.ts`) uses `zustand/persist` backed by **localStorage**, not Dexie.
 
 Important current limitation:
 
-some of these controls are **not fully wired** to actual runtime behavior yet. Details are documented below in **Known gaps / unwired elements**.
+some of these controls are **not fully wired** to actual runtime behavior. Details are documented below in **Known gaps / unwired elements**.
 
 ### Inspect page
 
@@ -124,16 +132,16 @@ The standalone Inspect page exists and works as a read-only node inspector.
 It can display:
 
 - selected node type and ID
-- geometry values
-- style values
+- geometry values (type-specific: x/y/width/height for rects, cx/cy/rx/ry for ellipses, etc.)
+- style values (fill kind, stroke color and width, opacity)
 - transform values
-- computed bounds
-- raw path data with copy button
+- computed bounds via `getNodeBounds` (`src/features/selection/utils/nodeBounds.ts`)
+- raw path data for path nodes with copy button
 
 Important current limitation:
 
-- the page is reachable by the router, but the main editor flow never navigates to it
-- the bottom-bar “Inspect” mode does **not** open this page; it opens the regular inspector workflow instead
+- the page is reachable by the router (`src/app/routing/AppRouter.tsx`), but no code in the app ever calls `navigate('inspect')`
+- the bottom-bar "Inspect" mode pins the inspector sheet open inside the editor — it does not navigate to this page
 
 ---
 
@@ -143,14 +151,15 @@ Important current limitation:
 
 Core files:
 
-- `src/db/dexie/db.ts`
-- `src/db/dexie/queries.ts`
-- `src/features/workspace/hooks/useBootstrapDocument.ts`
+- `src/db/dexie/db.ts` — Dexie schema: `documents`, `snapshots`, `assets` tables
+- `src/db/dexie/queries.ts` — CRUD operations for documents and snapshots
+- `src/features/workspace/hooks/useBootstrapDocument.ts` — opens most recent doc or creates a new one on app start
 
 Current behavior:
 
-- documents are saved in Dexie
-- snapshots are saved in Dexie
+- documents are saved in Dexie (`documents` table)
+- snapshots are saved in Dexie (`snapshots` table)
+- guides are persisted per-document in Dexie via `doc.editorState.guides` (written on guide add/move/remove in `editorStore`)
 - on app load, the most recent document is opened if one exists
 - if no document exists, a new untitled document is created automatically
 - manual save is available from the editor top bar
@@ -158,22 +167,26 @@ Current behavior:
 
 ## 2) Canvas navigation and view state
 
+The canvas is composed of five layers (`src/features/canvas/components/CanvasViewport.tsx`):
+
+- `CanvasArtworkLayer` — renders the document and handles all pointer/gesture interaction
+- `CanvasGridLayer` — draws the grid overlay
+- `CanvasGuidesLayer` — draws guides and handles ruler-strip drag-to-create
+- `CanvasOverlayLayer` — selection handles, marquee box, path edit overlay
+- `CanvasUiOverlay` — bottom-right pill controls: zoom display, grid toggle, guides toggle, snap toggle, outline mode toggle, and add-guide (+H/+V) buttons
+
 The canvas supports:
 
 - panning
-- zooming
+- zooming (buttons, wheel, pinch gesture)
 - zoom reset
-- wheel zoom
-- pinch zoom
 - camera state in the store
 - grid overlay
-- guide overlay
+- guide overlay (guides are draggable; dragging off-canvas removes them)
+- ruler-strip drag to create guides (8px strips along the top and left edges)
 - snap toggle
 - outline mode toggle
 - zoom display overlay
-- ruler-strip drag to create guides
-
-The editor has a meaningful view-state system already in place.
 
 ## 3) Selection and transforms
 
@@ -192,16 +205,18 @@ The current editor supports:
 
 ## 4) Drawing and editing modes
 
-Bottom-bar modes currently present:
+Bottom-bar modes (`src/components/layout/EditorBottomBar.tsx`):
 
-- Pan
-- Select
-- Shape
-- Pen
-- Text
-- Paint
-- Structure
-- Inspect
+- Pan (`navigate`)
+- Select (`select`)
+- Shape (`shape`)
+- Pen (`pen`)
+- Text (`text`)
+- Paint (`paint`)
+- Structure (`structure`)
+- Inspect (`inspect`)
+
+There is also an internal **path** mode (`path`) used when editing path points directly. It is not a bottom-bar button; it activates when "Edit Path" is triggered and shows "Select" as active in the bottom bar. It is exited by clicking any other bottom-bar button.
 
 These modes are not just cosmetic. The editor has working behavior behind them.
 
@@ -209,11 +224,13 @@ These modes are not just cosmetic. The editor has working behavior behind them.
 
 Supports direct draw-on-canvas for:
 
-- rectangle
-- ellipse
-- line
-- polygon
-- star
+- rectangle (`rect`)
+- ellipse (`ellipse`)
+- line (`line`)
+- polygon (`polygon`)
+- star (`star`)
+
+Shape type is stored in `editorStore.ui.shapeType` (`src/stores/editorStore.ts`).
 
 ### Pen mode
 
@@ -223,8 +240,10 @@ Supports:
 - live preview while drawing
 - closing a path by returning to the first anchor
 - Done / Discard flow
-- bezier handle dragging
+- bezier handle dragging (drag at anchor placement to set control handles)
 - snap support during handle work
+
+In-progress pen paths are tracked in `editorStore.ui.penPathInProgress`. Leaving pen mode auto-discards any in-progress path.
 
 ### Text mode
 
@@ -236,13 +255,17 @@ Supports:
 
 ### Paint / Structure / Inspect modes
 
-These are wired into the current editor workflow, primarily by opening or pinning the related side surfaces rather than sending the user to separate pages.
+These modes open specific side surfaces rather than navigating to separate pages:
+
+- **Paint**: pins the inspector open to the "appearance" section
+- **Structure**: opens the layers panel
+- **Inspect**: pins the inspector open to the "quick" section
 
 ## 5) Layers and inspector
 
 The repo currently includes:
 
-- recursive layers view
+- recursive layers view (`src/features/layers/components/LayersPanel.tsx`)
 - selection from layers
 - lock control
 - visibility control
@@ -252,7 +275,9 @@ The repo currently includes:
 - geometry editing for supported node types
 - typography editing for text
 - path-related editing tools
-- gradient editing flow
+- gradient editing flow (`src/features/resources/components/GradientEditorSheet.tsx`)
+
+Inspector sections are enumerated in `editorStore.ui.inspectorSection`: `quick`, `geometry`, `appearance`, `typography`, `path`, `arrange`, `svg`, `metadata`.
 
 ## 6) Path editing and boolean operations
 
@@ -260,17 +285,17 @@ The path system is one of the stronger parts of the repo.
 
 Current capabilities include:
 
-- converting supported shapes to paths
-- parsing and serializing path data
-- path point editing
+- converting supported shapes to paths (`src/features/path/utils/pathConversion.ts`)
+- parsing and serializing path data (`src/features/path/utils/pathGeometry.ts`)
+- path point editing (`src/features/path/components/PathEditOverlay.tsx`)
 - segment point insertion
 - point deletion
 - point-type conversion
 - open/closed path toggling
 - snapping during path editing
-- boolean union / subtract / intersect / exclude
+- boolean union / subtract / intersect / exclude (`src/features/path/utils/booleanOps.ts`)
 
-Boolean operations use Paper.js as the primary engine, with fallback behavior retained when needed.
+Boolean operations use **Paper.js** as the primary engine (curve-preserving, async dynamic import). If Paper.js fails or is unavailable, the fallback is **polygon-clipping**, which approximates curves as sampled polygons. The fallback produces correct topology but loses bezier curve fidelity.
 
 ## 7) Gradients
 
@@ -279,50 +304,58 @@ The resource system is only partly realized overall, but gradients are genuinely
 Current gradient support includes:
 
 - creating linear and radial gradients
-- editing stops
-- changing stop color, offset, and opacity
+- editing stops (color, offset, opacity)
 - applying gradients to selected nodes
 - live canvas rendering
-- correct SVG export through `<defs>` and `url(#id)` references
+- correct SVG export through `<defs>` and `url(#id)` references (`src/features/export/svgSerializer.ts`)
+
+Gradient definitions are stored in `doc.resources.gradients` (`src/model/resources/resourceTypes.ts`).
 
 ## 8) Images
 
-Image import is working in the editor top bar.
+Image import is accessible from the editor top bar (the image-plus icon).
 
 Current behavior:
 
 - select an image file from the device
-- image is loaded as a data URL
-- image is auto-scaled to fit roughly within the document
-- image is centered and inserted into the canvas
+- image is loaded as a data URL via `FileReader`
+- image is auto-scaled to fit within 80% of the document dimensions
+- image is centered and inserted into the canvas as an `ImageNode`
 - image behaves as a selectable node
 
 Important limitation:
 
-- this is document insertion, not a true reusable asset library flow
+- images are always embedded as base64 data URLs directly into the document; there is no asset library integration yet
 
 ## 9) Export
 
+`src/features/export/svgSerializer.ts`
+
 SVG export currently supports:
 
-- document background
-- transforms
-- gradients
-- text
-- multiple node types
+- document background (solid color)
+- transforms (translate, rotate, scale, skew, pivot-based rotation)
+- gradients (serialized to `<defs>`)
+- text (font-family, font-size, font-weight)
+- all drawable node types: rect, circle, ellipse, line, polyline, polygon, star (as polygon), path, image, group
 - download flow
 - copy-source flow
 
 ## 10) Snapshots and undo/redo history
 
+Core files:
+
+- `src/stores/historyStore.ts` — session undo/redo stack (capped at 50 entries)
+- `src/features/snapshots/components/SnapshotsSheet.tsx` — named snapshot UI
+- `src/db/dexie/queries.ts` — `saveSnapshot`, `listSnapshots`, `deleteSnapshot`
+
 Current state:
 
-- named snapshots can be saved
-- snapshots can be listed
-- snapshots can be restored
+- named snapshots can be saved with optional labels
+- snapshots can be listed and restored
 - snapshots can be deleted
-- session undo/redo exists
-- the undo stack is capped to reduce runaway memory growth
+- session undo/redo exists (both undo and redo write the restored document back to Dexie)
+- the undo stack is capped at 50 entries to limit memory growth
 - history labels are visible in the snapshot/history UI
 
 ---
@@ -341,50 +374,53 @@ Files:
 
 Current state:
 
-- the router supports `inspect`
-- the page itself works
-- there are no actual `navigate('inspect')` calls in the app
+- the router handles `'inspect'` as a valid page value
+- the page itself works as a read-only inspector
+- no code in the app ever calls `navigate('inspect')`, so the page is unreachable during normal use
 
 Practical result:
 
 - the standalone Inspect page is effectively dormant
-- the bottom-bar Inspect mode is a different workflow from the standalone page
+- the bottom-bar Inspect mode is a separate workflow that stays inside the editor
 
-## 2) `snapThresholdPx` is persisted but not actually used by snapping logic
+## 2) `snapThresholdPx` is persisted but not consumed by snapping logic
 
 Files involved:
 
 - `src/pages/settings/SettingsPage.tsx`
 - `src/stores/settingsStore.ts`
-- snapping logic in canvas/path features
+- `src/features/canvas/components/CanvasArtworkLayer.tsx` (line 706)
+- `src/features/path/components/PathEditOverlay.tsx` (lines 153–154)
 
 Current state:
 
-- the setting can be changed and saved
-- snapping logic still uses hardcoded screen-space thresholds in the editor
+- the setting can be changed and is persisted to localStorage via `settingsStore`
+- both `CanvasArtworkLayer` and `PathEditOverlay` call `screenThresholdToDocSpace(8, zoom)` with the threshold **hardcoded to `8`** rather than reading from `settingsStore`
+- the snapping function `snapPoint` in `src/features/path/utils/snapUtils.ts` already accepts a threshold parameter — the fix is simply to pass `settingsStore.snapThresholdPx` at the two call sites above
 
 Practical result:
 
-- the UI suggests configurable snapping tolerance
-- the real snapping behavior does not yet honor that value
+- changing snap threshold in Settings has no effect on actual snapping behavior
 
-## 3) `defaultExportScale` is saved but not used by export flow
+## 3) `defaultExportScale` is saved but not used by the export flow
 
 Files involved:
 
 - `src/pages/settings/SettingsPage.tsx`
 - `src/stores/settingsStore.ts`
+- `src/features/export/svgSerializer.ts`
+- `src/pages/export/ExportPage.tsx`
 
 Current state:
 
-- the setting is stored
-- the export pipeline does not consume it
+- the setting is stored in `settingsStore` (options: 1×, 2×, 3×)
+- `serializeDocumentToSvg` and `ExportPage` do not read this value
 
 Practical result:
 
 - this preference currently behaves like unfinished plumbing
 
-## 4) Grid and guide “defaults” are not true persisted defaults
+## 4) Grid and guide visibility toggles are not true persisted settings
 
 Files involved:
 
@@ -394,16 +430,19 @@ Files involved:
 
 Current state:
 
-- Settings exposes “Show guides by default” and “Show grid by default”
-- those toggles directly mutate the current editor view state
-- they are not persisted in `settingsStore`
-- editor boot still uses hardcoded defaults in `editorStore`
+- Settings exposes "Show guides by default" and "Show grid by default"
+- both toggles directly mutate `editorStore.view.showGrid` / `editorStore.view.showGuides`
+- neither value is stored in `settingsStore`
+- `editorStore` initializes with hardcoded defaults: `showGrid: false`, `showGuides: true`
+
+Note: **grid size** and **angle snap degrees** are handled differently — they are stored in `settingsStore` and also immediately applied to `editorStore` when changed in Settings. However, they are still **not read from `settingsStore` at editor boot**, so session changes do not persist across app restarts.
 
 Practical result:
 
-- these controls behave as current-session view toggles, not real defaults
+- "Show guides" and "Show grid" toggles are current-session view toggles, not real defaults
+- grid size and angle snap changes survive the Settings page within a session but reset to hardcoded values on app restart
 
-## 5) Only `outlineModeDefault` is actually initialized from settings at editor boot
+## 5) Only `outlineModeDefault` is initialized from settings at editor boot
 
 Files involved:
 
@@ -413,8 +452,8 @@ Files involved:
 
 Current state:
 
-- outline mode is initialized from settings on editor mount
-- grid size and angle snap are still effectively hardcoded as editor boot defaults unless changed during the session
+- outline mode is initialized from `settingsStore.outlineModeDefault` on editor mount (via `useEffect` in `EditorPage`)
+- grid size, angle snap, and grid/guide visibility are not read from `settingsStore` at boot
 
 Practical result:
 
@@ -422,26 +461,27 @@ Practical result:
 
 ## 6) Dexie `assets` table exists but is unused
 
-Files:
-
-- `src/db/dexie/db.ts`
+File: `src/db/dexie/db.ts`
 
 Current state:
 
-- the schema defines `assets`
+- the schema defines an `assets` table with `kind: 'font' | 'image' | 'template' | 'library'`
 - no active app flow reads from or writes to it
+- image import embeds data URLs directly into the document (`href` field of `ImageNode`) rather than going through the asset table
 
 Practical result:
 
-- the repo has no true asset library yet, despite the database scaffold
+- the repo has no true asset library despite the database scaffold
 
 ## 7) Broader resource model is ahead of implementation
 
+File: `src/model/resources/resourceTypes.ts`
+
 Current state:
 
-- the repo has a richer concept of resources than the live UI currently exposes
-- gradients are wired
-- other resource categories are not meaningfully completed end to end
+- the model defines: `SwatchResource`, `GradientResource`, `PatternResource`, `FilterResource`, `MarkerResource`, `SymbolResource`, `ComponentResource`, `TextStyleResource`, `ExportSliceResource`
+- only `GradientResource` is meaningfully wired end to end
+- all other resource types are defined in the model but have no live UI or behavior
 
 Practical result:
 
@@ -449,18 +489,19 @@ Practical result:
 
 ## 8) Home thumbnails are incomplete previews
 
-File:
-
-- `src/pages/home/HomePage.tsx`
+File: `src/pages/home/HomePage.tsx`
 
 Current state:
 
-- thumbnails only render a few simple node types
-- they do not reuse the true document-to-SVG serializer or an equivalent preview pipeline
+- thumbnails render only `rect`, `ellipse`, and `circle` at the top level (up to 6 nodes)
+- paths, polygons, stars, lines, text, images, groups, and nested nodes all return `null`
+- gradient fills fall back to a default blue (`#4f8ef7`)
+- transforms are not applied
+- the full SVG serializer (`src/features/export/svgSerializer.ts`) is not used here
 
 Practical result:
 
-- Home page previews can be misleading for more complex documents
+- Home page previews are often blank or misleadingly simple for complex documents
 
 ---
 
@@ -468,7 +509,7 @@ Practical result:
 
 The repo already contains meaningful tests, mostly around model, geometry, document operations, snapping, and history.
 
-Current test files include:
+Current test files:
 
 - `src/features/documents/services/documentCommands.test.ts`
 - `src/features/documents/utils/documentMutations.test.ts`
@@ -496,8 +537,8 @@ This is not a full file-by-file map, but it reflects the active architecture.
 - `src/main.tsx`
 - `src/app/App.tsx`
 - `src/app/providers/AppProviders.tsx`
-- `src/app/routing/AppRouter.tsx`
-- `src/app/routing/NavigationContext.tsx`
+- `src/app/routing/AppRouter.tsx` — simple conditional render, not a URL-based router
+- `src/app/routing/NavigationContext.tsx` — in-memory React state, default page: `'editor'`
 
 ### Pages
 
@@ -505,32 +546,38 @@ This is not a full file-by-file map, but it reflects the active architecture.
 - `src/pages/editor`
 - `src/pages/export`
 - `src/pages/settings`
-- `src/pages/inspect`
+- `src/pages/inspect` — exists but is not navigated to from any active flow
 
 ### Core editor areas
 
-- `src/features/canvas`
-- `src/features/documents`
-- `src/features/inspector`
-- `src/features/layers`
-- `src/features/path`
-- `src/features/selection`
-- `src/features/workspace`
-- `src/features/export`
-- `src/features/snapshots`
+- `src/features/canvas` — viewport layers: ArtworkLayer, GridLayer, GuidesLayer, OverlayLayer, UiOverlay
+- `src/features/documents` — commands, mutations, document settings sheet
+- `src/features/inspector` — inspector sheet and section panels
+- `src/features/layers` — layers panel
+- `src/features/path` — path edit overlay, boolean ops, snap utilities, path geometry/conversion
+- `src/features/resources` — gradient editor sheet
+- `src/features/selection` — node bounds utilities
+- `src/features/workspace` — bootstrap hook
+- `src/features/export` — SVG serializer
+- `src/features/snapshots` — named snapshot sheet
 
 ### State and persistence
 
-- `src/stores`
-- `src/db`
+- `src/stores` — `editorStore` (Zustand + Immer), `historyStore`, `settingsStore` (persisted to localStorage)
+- `src/db` — Dexie setup and query functions
 
 ### Data model
 
-- `src/model`
+- `src/model/document` — `SvgDocument`, `documentTypes`, `documentFactory`
+- `src/model/nodes` — `nodeTypes` (all SVG node shapes and appearance models)
+- `src/model/resources` — `resourceTypes` (gradients, swatches, patterns, symbols, etc.)
+- `src/model/view` — `viewTypes` (ViewState, SnapConfig, Guide)
+- `src/model/history` — `historyTypes`
+- `src/model/selection` — `selectionTypes`
 
 ### Layout and shared UI
 
-- `src/components`
+- `src/components/layout` — EditorTopBar, EditorBottomBar, ContextActionStrip
 
 ---
 
@@ -543,15 +590,15 @@ npm run test
 npm run build
 ```
 
-Build output uses Vite, and the build script also runs the GitHub Pages copy step from `scripts/copy-pages-404.mjs`.
+The test runner is Vitest (`npm run test` runs `vitest run`). Build output uses Vite; the build script also runs `scripts/copy-pages-404.mjs` to support GitHub Pages SPA routing.
 
 ---
 
 ## Deployment
 
-The repo includes GitHub Pages deployment workflow files in `.github/workflows`.
+The repo includes GitHub Pages deployment workflow files in `.github/workflows/deploy-pages.yml`.
 
-This repo also appears to include phone-oriented zip extraction workflow support for repo management.
+There is also a `.github/workflows/unzip-repo-final.yml` workflow for phone-oriented zip extraction for repo management.
 
 ---
 
@@ -565,100 +612,81 @@ Goal: make the Settings page tell the truth.
 
 Work to do:
 
-- wire `snapThresholdPx` into actual snap calculations used by the canvas and path editing flows
-- wire `defaultExportScale` into the export flow or remove it until real export scaling exists
-- decide whether “Show grid by default” and “Show guides by default” are real persisted settings or current-session toggles
-- if they are real defaults, move them into `settingsStore` and initialize editor state from them on boot
-- initialize grid size and angle snap from settings consistently rather than leaving boot defaults hardcoded in `editorStore`
+- wire `snapThresholdPx` into actual snap calculations: replace the hardcoded `8` in `CanvasArtworkLayer.tsx:706` and `PathEditOverlay.tsx:153` with `useSettingsStore.getState().snapThresholdPx` passed through `screenThresholdToDocSpace`
+- wire `defaultExportScale` into the export flow, or remove the control until real scaled export exists
+- decide whether "Show grid by default" and "Show guides by default" should be real persisted settings
+- if yes, add them to `settingsStore` and initialize `editorStore.view` from them at editor boot alongside `outlineModeDefault`
+- initialize grid size and angle snap from `settingsStore` at editor boot, not just when the Settings page is open
+- resolve the standalone `InspectPage` (see Known gap #1): either wire `navigate('inspect')` into the editor flow, or remove the page and fold any unique functionality into the inspector sheet
 
 Why this phase matters:
 
-right now the Settings page overpromises. Fixing that removes confusion and makes the repo easier to trust.
+right now Settings overpromises on three separate controls and the Inspect page is effectively dead code. Fixing these removes confusion and makes the repo easier to trust.
 
-## Phase 2 — resolve the inspect split
-
-Goal: stop having two different inspect concepts drifting apart.
-
-Work to do:
-
-- decide whether the standalone `InspectPage` should be part of the real navigation flow
-- if yes, add real navigation to it from the editor
-- if no, remove it and fold any useful functionality back into the normal inspector sheet
-- make sure bottom-bar “Inspect” means exactly one thing
-
-Why this phase matters:
-
-this is currently duplicated UX with only one version actually in the main flow.
-
-## Phase 3 — make previews honest
+## Phase 2 — make previews honest
 
 Goal: make Home page thumbnails reflect real documents.
 
 Work to do:
 
-- replace the current minimal thumbnail renderer with a true preview pipeline
-- ideally reuse the SVG serializer or a lightweight equivalent
-- support more node types, gradients, transforms, text, images, and nested content
-- verify that document previews still perform acceptably on mobile
+- replace the minimal thumbnail renderer in `src/pages/home/HomePage.tsx` with a proper preview pipeline
+- ideally reuse `serializeDocumentToSvg` from `src/features/export/svgSerializer.ts` or an equivalent lightweight renderer
+- support at minimum: paths, groups, polygons, stars, text, images, transforms, and gradients
+- verify that document previews still perform acceptably on mobile with many documents
 
 Why this phase matters:
 
-opening a document should not feel like opening a loot box with a fake cover image.
+opening a document should not feel like opening a loot box with a blank cover image.
 
-## Phase 4 — turn the asset system into a real system
+## Phase 3 — turn the asset and resource systems into real systems
 
-Goal: either finish the asset pipeline or trim the unused scaffold.
+Goal: either finish the asset pipeline and key resource types, or trim the unused scaffold.
 
 Work to do:
 
-- decide whether the Dexie `assets` table is staying
-- if staying, implement real CRUD and UI for reusable assets such as images, templates, fonts, or libraries
+**Asset system:**
+
+- decide whether the Dexie `assets` table is staying (it currently defines `kind: 'font' | 'image' | 'template' | 'library'`)
+- if staying, implement real CRUD and UI for reusable assets
 - connect image import to the asset pipeline where appropriate instead of always embedding ad hoc data URLs directly into the document
 - define how assets relate to persistence, export, and document portability
-- if the asset system is not near-term, remove or clearly quarantine the unused table and model concepts
+- if not near-term, remove or quarantine the unused table
 
-Why this phase matters:
+**Resource model:**
 
-the architecture currently hints at a reusable asset library that does not exist yet.
-
-## Phase 5 — narrow or complete the broader resource model
-
-Goal: make resource architecture match the product surface.
-
-Work to do:
-
-- audit every resource type currently defined in the model
+- audit every resource type in `src/model/resources/resourceTypes.ts`: swatches, patterns, filters, markers, symbols, components, text styles, export slices
 - decide which are near-term features versus long-term architecture
 - complete a small number properly or trim the rest back for now
-- likely candidates after gradients: swatches, text styles, symbols/components, patterns, export slices
+- likely next candidates after gradients: swatches, text styles, export slices
 
 Why this phase matters:
 
-right now the repo has “bigger editor” bones but not all the connective tissue.
+the repo currently hints at a full-featured asset and resource library that does not yet exist. Either deliver it or trim the hint so the architecture matches the product.
 
-## Phase 6 — strengthen UI integration testing
+## Phase 4 — strengthen UI integration testing
 
 Goal: test real editing flows, not just the math engine under the hood.
 
 Work to do:
 
-- add integration tests for the editor’s top bar, bottom bar, mode changes, and panels
+- add integration tests for the editor's top bar, bottom bar, mode changes, and panels
 - add interaction tests for shape draw, pen mode, text placement, layers selection, and inspector edits
 - add tests for settings-driven behavior once Phase 1 is complete
 - add tests around save/load/restore flows and snapshot restoration
 
 Why this phase matters:
 
-the current test suite protects core behavior fairly well, but user-flow regressions can still slip through the cracks.
+the current test suite protects core math fairly well, but user-flow regressions can still slip through the cracks.
 
-## Phase 7 — improve export fidelity and production readiness
+## Phase 5 — improve export fidelity and production readiness
 
 Goal: reduce the gap between editing fidelity and final output confidence.
 
 Work to do:
 
 - verify export fidelity across all supported node types and transforms
-- decide whether raster export, scaled export, or PDF export belong in scope soon
+- decide whether raster export (via `@resvg/resvg-wasm` or `html-to-image`, both already in dependencies), scaled export, or PDF export (via `pdf-lib`, also in dependencies) belong in scope soon
+- wire `defaultExportScale` if scaled export is added
 - improve naming, metadata, and export ergonomics where needed
 - audit performance and memory behavior on larger documents, especially mobile-heavy sessions
 
@@ -666,7 +694,7 @@ Why this phase matters:
 
 an editor becomes much more believable once creation and export feel equally solid.
 
-## Phase 8 — product polish and cleanup pass
+## Phase 6 — product polish and cleanup pass
 
 Goal: reduce architectural noise and sharpen the repo for ongoing development.
 
@@ -676,7 +704,8 @@ Work to do:
 - review old roadmap text and repo docs for drift
 - standardize wording between modes, sheets, pages, and route names
 - tighten visual consistency across top bar, bottom bar, overlays, drawers, and secondary pages
-- document what is intentionally local-only versus document-persisted versus future-synced
+- document what is intentionally local-only (localStorage) versus document-persisted (Dexie) versus future-synced
+- confirm whether the `yjs` / `y-indexeddb` / `y-webrtc` / `y-websocket` dependencies in `package.json` are intended for a future collaboration feature and document accordingly
 
 Why this phase matters:
 
@@ -688,13 +717,13 @@ this repo has a strong skeleton now. A cleanup pass will make it much easier to 
 
 If development resumes immediately, the best order is:
 
-1. Phase 1 — fix settings truthfulness
-2. Phase 2 — resolve inspect duplication
-3. Phase 3 — improve Home previews
-4. Phase 4 — decide the fate of the asset system
-5. Phase 6 — add more integration tests in parallel as the above work lands
+1. Phase 1 — fix settings truthfulness and resolve the dormant Inspect page
+2. Phase 2 — improve Home previews
+3. Phase 4 — add more integration tests in parallel as the above work lands
+4. Phase 3 — decide the fate of the asset and resource systems
+5. Phase 5 — export fidelity improvements
 
-That sequence fixes the biggest “UI says one thing, code does another” problems first.
+That sequence fixes the biggest "UI says one thing, code does another" problems first, then strengthens confidence before expanding the feature surface.
 
 ---
 
@@ -714,7 +743,7 @@ It is strongest today in:
 
 It is weakest today in:
 
-- settings consistency
+- settings consistency (three unwired controls, uneven boot initialization)
 - dormant standalone inspect flow
 - asset-library completion
 - broader resource-system completion

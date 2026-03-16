@@ -1,23 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { PointerEvent as ReactPointerEvent, ReactNode, WheelEvent as ReactWheelEvent } from 'react'
+import type { PointerEvent as ReactPointerEvent, WheelEvent as ReactWheelEvent } from 'react'
 import { nanoid } from 'nanoid'
 import type { SvgDocument } from '@/model/document/documentTypes'
 import type {
-  CircleNode,
-  EllipseNode,
-  LineNode,
   PathNode,
-  PolygonNode,
-  PolylineNode,
-  RectNode,
-  StarNode,
   SvgNode,
-  TextNode,
-  TransformModel
 } from '@/model/nodes/nodeTypes'
 import { cloneDocument, getNodeById, moveNodesInDocument } from '@/features/documents/utils/documentMutations'
 import { clientPointToDocumentPoint, getEffectiveViewBox } from '@/features/canvas/utils/viewBox'
-import { boundsIntersect, collectSelectableNodes, getNodeBounds, normalizeBounds, type NodeBounds } from '@/features/selection/utils/nodeBounds'
+import { boundsIntersect, collectSelectableNodes, getNodeBounds, normalizeBounds } from '@/features/selection/utils/nodeBounds'
 import { saveDocument } from '@/db/dexie/queries'
 import { useEditorStore } from '@/stores/editorStore'
 import { useHistoryStore } from '@/stores/historyStore'
@@ -25,170 +16,7 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import { runCommand } from '@/features/documents/services/commandRunner'
 import { parsePathD, serializePathD } from '@/features/path/utils/pathGeometry'
 import { snapPoint, screenThresholdToDocSpace } from '@/features/path/utils/snapUtils'
-
-function fillFromNode(node: { style?: { fill?: { kind: string; color?: string; resourceId?: string } } }) {
-  if (!node.style?.fill) return 'transparent'
-  if (node.style.fill.kind === 'none') return 'transparent'
-  if (node.style.fill.kind === 'solid') return node.style.fill.color ?? '#ffffff'
-  if (node.style.fill.kind === 'gradient' && node.style.fill.resourceId) return `url(#${node.style.fill.resourceId})`
-  if (node.style.fill.kind === 'pattern' && node.style.fill.resourceId) return `url(#${node.style.fill.resourceId})`
-  return 'transparent'
-}
-
-function strokeFromNode(node: { style?: { stroke?: { color?: string; width: number } } }) {
-  return {
-    stroke: node.style?.stroke?.color ?? 'transparent',
-    strokeWidth: node.style?.stroke?.width ?? 0
-  }
-}
-
-function transformToSvgString(transform?: TransformModel) {
-  if (!transform) return undefined
-  const parts: string[] = []
-
-  if (transform.translateX || transform.translateY) {
-    parts.push(`translate(${transform.translateX ?? 0} ${transform.translateY ?? 0})`)
-  }
-
-  if (transform.pivotX != null && transform.pivotY != null) {
-    parts.push(`translate(${transform.pivotX} ${transform.pivotY})`)
-  }
-
-  if (transform.rotate) {
-    parts.push(`rotate(${transform.rotate})`)
-  }
-
-  if (transform.scaleX != null || transform.scaleY != null) {
-    parts.push(`scale(${transform.scaleX ?? 1} ${transform.scaleY ?? 1})`)
-  }
-
-  if (transform.skewX) parts.push(`skewX(${transform.skewX})`)
-  if (transform.skewY) parts.push(`skewY(${transform.skewY})`)
-
-  if (transform.pivotX != null && transform.pivotY != null) {
-    parts.push(`translate(${-transform.pivotX} ${-transform.pivotY})`)
-  }
-
-  return parts.length ? parts.join(' ') : undefined
-}
-
-function computeStarPoints(cx: number, cy: number, outer: number, inner: number, n: number): string {
-  const pts: string[] = []
-  for (let i = 0; i < n * 2; i++) {
-    const angle = (Math.PI / n) * i - Math.PI / 2
-    const r = i % 2 === 0 ? outer : inner
-    pts.push(`${cx + r * Math.cos(angle)},${cy + r * Math.sin(angle)}`)
-  }
-  return pts.join(' ')
-}
-
-function renderNode(node: SvgNode, selectedIds: string[], onPointerDown: (event: ReactPointerEvent<SVGElement>, id: string) => void, outlineMode = false): ReactNode {
-  if (node.visible === false) return null
-  const isSelected = selectedIds.includes(node.id)
-  const common = {
-    key: node.id,
-    onPointerDown: (event: ReactPointerEvent<SVGElement>) => {
-      event.stopPropagation()
-      onPointerDown(event, node.id)
-    },
-    style: { cursor: 'pointer' },
-    opacity: isSelected ? 0.9 : 1,
-    transform: transformToSvgString(node.transform)
-  }
-
-  // In outline mode: suppress fill, ensure a visible stroke
-  function outlineFill() { return 'none' }
-  function outlineStroke(n: Parameters<typeof strokeFromNode>[0]) {
-    const { stroke, strokeWidth } = strokeFromNode(n)
-    return {
-      stroke: stroke !== 'transparent' ? stroke : '#888888',
-      strokeWidth: Math.max(1, strokeWidth)
-    }
-  }
-
-  switch (node.type) {
-    case 'rect': {
-      const n = node as RectNode
-      const fill = outlineMode ? outlineFill() : fillFromNode(n)
-      const { stroke, strokeWidth } = outlineMode ? outlineStroke(n) : strokeFromNode(n)
-      return <rect {...common} x={n.x} y={n.y} width={n.width} height={n.height} rx={n.rx} ry={n.ry} fill={fill} stroke={stroke} strokeWidth={strokeWidth} />
-    }
-    case 'circle': {
-      const n = node as CircleNode
-      const fill = outlineMode ? outlineFill() : fillFromNode(n)
-      const { stroke, strokeWidth } = outlineMode ? outlineStroke(n) : strokeFromNode(n)
-      return <circle {...common} cx={n.cx} cy={n.cy} r={n.r} fill={fill} stroke={stroke} strokeWidth={strokeWidth} />
-    }
-    case 'ellipse': {
-      const n = node as EllipseNode
-      const fill = outlineMode ? outlineFill() : fillFromNode(n)
-      const { stroke, strokeWidth } = outlineMode ? outlineStroke(n) : strokeFromNode(n)
-      return <ellipse {...common} cx={n.cx} cy={n.cy} rx={n.rx} ry={n.ry} fill={fill} stroke={stroke} strokeWidth={strokeWidth} />
-    }
-    case 'line': {
-      const n = node as LineNode
-      const { stroke, strokeWidth } = outlineMode ? outlineStroke(n) : strokeFromNode(n)
-      return <line {...common} x1={n.x1} y1={n.y1} x2={n.x2} y2={n.y2} stroke={stroke} strokeWidth={strokeWidth || 2} />
-    }
-    case 'polyline': {
-      const n = node as PolylineNode
-      const { stroke, strokeWidth } = outlineMode ? outlineStroke(n) : strokeFromNode(n)
-      return <polyline {...common} points={n.points.map((p) => `${p.x},${p.y}`).join(' ')} fill="none" stroke={stroke} strokeWidth={strokeWidth} />
-    }
-    case 'polygon': {
-      const n = node as PolygonNode
-      const fill = outlineMode ? outlineFill() : fillFromNode(n)
-      const { stroke, strokeWidth } = outlineMode ? outlineStroke(n) : strokeFromNode(n)
-      return <polygon {...common} points={n.points.map((p) => `${p.x},${p.y}`).join(' ')} fill={fill} stroke={stroke} strokeWidth={strokeWidth} />
-    }
-    case 'star': {
-      const n = node as StarNode
-      const fill = outlineMode ? outlineFill() : fillFromNode(n)
-      const { stroke, strokeWidth } = outlineMode ? outlineStroke(n) : strokeFromNode(n)
-      const pts = computeStarPoints(n.cx, n.cy, n.outerRadius, n.innerRadius, n.numPoints)
-      return <polygon {...common} points={pts} fill={fill} stroke={stroke} strokeWidth={strokeWidth} />
-    }
-    case 'path': {
-      const n = node as PathNode
-      const fill = outlineMode ? outlineFill() : fillFromNode(n)
-      const { stroke, strokeWidth } = outlineMode ? outlineStroke(n) : strokeFromNode(n)
-      return <path {...common} d={n.d} fill={fill} stroke={stroke} strokeWidth={strokeWidth} />
-    }
-    case 'text': {
-      const n = node as TextNode
-      const fill = outlineMode ? outlineFill() : fillFromNode(n)
-      const { stroke, strokeWidth } = outlineMode ? outlineStroke(n) : strokeFromNode(n)
-      return (
-        <text {...common} x={n.x} y={n.y} fill={fill} stroke={stroke} strokeWidth={strokeWidth} fontFamily={n.textStyle?.fontFamily} fontSize={n.textStyle?.fontSize}>
-          {n.content}
-        </text>
-      )
-    }
-    case 'group':
-      return (
-        <g
-          key={node.id}
-          transform={transformToSvgString(node.transform)}
-          opacity={isSelected ? 0.9 : 1}
-          style={{ cursor: 'pointer' }}
-          onPointerDown={(e: ReactPointerEvent<SVGElement>) => {
-            e.stopPropagation()
-            onPointerDown(e, node.id)
-          }}
-        >
-          {node.children?.map((child) => renderNode(child, selectedIds, onPointerDown, outlineMode))}
-        </g>
-      )
-    case 'root':
-      return (
-        <g key={node.id}>
-          {node.children?.map((child) => renderNode(child, selectedIds, onPointerDown, outlineMode))}
-        </g>
-      )
-    default:
-      return null
-  }
-}
+import { renderNode, type RenderContext, SvgDefsLayer } from '@/features/canvas/render'
 
 type PointerSnapshot = { clientX: number; clientY: number }
 
@@ -1014,7 +842,14 @@ export function CanvasArtworkLayer() {
   }
 
   const shapeDrawInteraction = interactionRef.current?.kind === 'shape-draw' ? interactionRef.current : null
-  const gradients = document.resources?.gradients ?? []
+
+  // Build the render context for the scene renderer
+  const renderContext: RenderContext = {
+    document,
+    selectedIds,
+    outlineMode,
+    onPointerDown: handleNodePointerDown,
+  }
 
   return (
     <svg
@@ -1026,35 +861,23 @@ export function CanvasArtworkLayer() {
       onWheel={handleWheel}
       style={{ touchAction: 'none' }}
     >
-      {gradients.length > 0 && (
-        <defs>
-          {gradients.map((g) =>
-            g.type === 'linearGradient' ? (
-              <linearGradient key={g.id} id={g.id} x1="0" y1="0" x2="1" y2="0" gradientUnits="objectBoundingBox">
-                {g.stops.map((s, i) => (
-                  <stop key={i} offset={`${(s.offset * 100).toFixed(1)}%`} stopColor={s.color} stopOpacity={s.opacity ?? 1} />
-                ))}
-              </linearGradient>
-            ) : (
-              <radialGradient key={g.id} id={g.id} cx="50%" cy="50%" r="50%" gradientUnits="objectBoundingBox">
-                {g.stops.map((s, i) => (
-                  <stop key={i} offset={`${(s.offset * 100).toFixed(1)}%`} stopColor={s.color} stopOpacity={s.opacity ?? 1} />
-                ))}
-              </radialGradient>
-            )
-          )}
-        </defs>
-      )}
+      {/* Full defs layer: gradients, patterns, filters, markers, style blocks */}
+      <SvgDefsLayer resources={document.resources ?? {
+        swatches: [], gradients: [], patterns: [], filters: [],
+        markers: [], symbols: [], styleBlocks: [], components: [],
+        textStyles: [], exportSlices: []
+      }} />
+
       {document.root.children?.map((node) => {
         const isDimmed = Boolean(isolationRootId) && node.id !== isolationRootId
         if (isDimmed) {
           return (
             <g key={node.id} opacity={0.2} style={{ pointerEvents: 'none' as const }}>
-              {renderNode(node, [], handleNodePointerDown, outlineMode)}
+              {renderNode(node, { ...renderContext, selectedIds: [] })}
             </g>
           )
         }
-        return renderNode(node, selectedIds, handleNodePointerDown, outlineMode)
+        return renderNode(node, renderContext)
       })}
 
       {/* Shape draw ghost preview */}

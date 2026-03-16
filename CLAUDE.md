@@ -40,7 +40,7 @@ Wave 1 — Architectural Truth Layer
 |---|---|---|
 | 0 | Project reset and architectural contract | ✅ Done |
 | 1 | Replace the core SVG model with a complete document model | ✅ Done |
-| 2 | Build the loss-aware raw SVG DOM import engine | ⬜ Pending |
+| 2 | Build the loss-aware raw SVG DOM import engine | ✅ Done |
 | 3 | Build the round-trip-safe serialization engine | ⬜ Pending |
 | 4 | Build the ID and reference graph engine | ⬜ Pending |
 

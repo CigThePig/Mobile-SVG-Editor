@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { ArrowLeft, FilePlus, Undo2, Redo2, ZoomIn, ZoomOut, Save, Layers, SlidersHorizontal, ImagePlus, Download, History, Settings } from 'lucide-react'
+import { ArrowLeft, FilePlus, Undo2, Redo2, ZoomIn, ZoomOut, Save, Layers, SlidersHorizontal, ImagePlus, Download, History, Settings, FolderOpen } from 'lucide-react'
 import { createAndSaveDocument, saveDocument } from '@/db/dexie/queries'
 import { useEditorStore } from '@/stores/editorStore'
 import { useHistoryStore } from '@/stores/historyStore'
@@ -7,6 +7,9 @@ import { useNavigation } from '@/app/routing/NavigationContext'
 import { runCommand } from '@/features/documents/services/commandRunner'
 import { DocumentSettingsSheet } from '@/features/documents/components/DocumentSettingsSheet'
 import { SnapshotsSheet } from '@/features/snapshots/components/SnapshotsSheet'
+import { ImportDialog } from '@/features/import/components/ImportDialog'
+import { ImportSummarySheet } from '@/features/import/components/ImportSummarySheet'
+import type { SvgImportResult } from '@/features/import/svgImportTypes'
 
 const iconBtn = (active = false, disabled = false): React.CSSProperties => ({
   width: 40,
@@ -41,6 +44,9 @@ export function EditorTopBar() {
   const imageInputRef = useRef<HTMLInputElement>(null)
   const [docSettingsOpen, setDocSettingsOpen] = useState(false)
   const [snapshotsOpen, setSnapshotsOpen] = useState(false)
+  const [importOpen, setImportOpen] = useState(false)
+  const [importResult, setImportResult] = useState<SvgImportResult | null>(null)
+  const [importSummaryOpen, setImportSummaryOpen] = useState(false)
 
   const zoomAroundCenter = (nextZoom: number) => {
     const clampedZoom = Math.min(4, Math.max(0.25, nextZoom))
@@ -142,6 +148,9 @@ export function EditorTopBar() {
           <ImagePlus size={20} />
         </button>
         <input ref={imageInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleImageImport} />
+        <button style={iconBtn()} onClick={() => setImportOpen(true)} aria-label="Import SVG">
+          <FolderOpen size={20} />
+        </button>
       </div>
 
       {/* Center: title (tap to open document settings) */}
@@ -240,6 +249,19 @@ export function EditorTopBar() {
         </button>
         <SnapshotsSheet open={snapshotsOpen} onOpenChange={setSnapshotsOpen} />
       </div>
+      <ImportDialog
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        onImportComplete={(result) => {
+          setImportResult(result)
+          setImportSummaryOpen(true)
+        }}
+      />
+      <ImportSummarySheet
+        open={importSummaryOpen}
+        onOpenChange={setImportSummaryOpen}
+        result={importResult}
+      />
     </header>
   )
 }

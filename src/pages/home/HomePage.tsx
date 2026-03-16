@@ -1,10 +1,35 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { Plus, FileText, Trash2, ArrowRight } from 'lucide-react'
 import { listRecentDocuments, createAndSaveDocument, deleteDocument } from '@/db/dexie/queries'
 import { useEditorStore } from '@/stores/editorStore'
 import { useHistoryStore } from '@/stores/historyStore'
 import { useNavigation } from '@/app/routing/NavigationContext'
 import type { DocumentRecord } from '@/db/dexie/db'
+import { serializeDocumentToSvg } from '@/features/export/svgSerializer'
+import type { SvgDocument } from '@/model/document/documentTypes'
+
+function DocumentThumbnail({ doc }: { doc: SvgDocument }) {
+  const html = useMemo(() => {
+    const truncated: SvgDocument = {
+      ...doc,
+      root: { ...doc.root, children: doc.root.children.slice(0, 30) }
+    }
+    const svgString = serializeDocumentToSvg(truncated)
+    return svgString
+      .replace(/^<\?xml[^?]*\?>\n?/, '')
+      .replace(
+        /<svg([^>]*)>/,
+        (_, attrs) => {
+          const cleaned = attrs
+            .replace(/\s*width="[^"]*"/, '')
+            .replace(/\s*height="[^"]*"/, '')
+          return `<svg${cleaned} width="40" height="40" preserveAspectRatio="xMidYMid meet" style="display:block;opacity:0.7">`
+        }
+      )
+  }, [doc])
+
+  return <div dangerouslySetInnerHTML={{ __html: html }} />
+}
 
 function formatDate(iso: string) {
   const d = new Date(iso)
@@ -111,26 +136,7 @@ export function HomePage() {
                 justifyContent: 'center'
               }}
             >
-              <svg
-                width="40"
-                height="40"
-                viewBox={`0 0 ${record.data.width} ${record.data.height}`}
-                preserveAspectRatio="xMidYMid meet"
-                style={{ opacity: 0.7, maxWidth: '100%', maxHeight: '100%' }}
-              >
-                {record.data.background.type === 'solid' && (
-                  <rect width={record.data.width} height={record.data.height} fill={(record.data.background as { type: 'solid'; color: string }).color} />
-                )}
-                {(record.data.root.children ?? []).slice(0, 6).map((node) => {
-                  const fillColor = (node as { style?: { fill?: { kind: string; color?: string } } }).style?.fill?.kind === 'solid'
-                    ? ((node as { style?: { fill?: { kind: string; color?: string } } }).style?.fill as { kind: string; color?: string } | undefined)?.color ?? '#4f8ef7'
-                    : '#4f8ef7'
-                  if (node.type === 'rect') return <rect key={node.id} x={(node as { x: number }).x} y={(node as { y: number }).y} width={(node as { width: number }).width} height={(node as { height: number }).height} fill={fillColor} opacity={0.8} />
-                  if (node.type === 'ellipse') return <ellipse key={node.id} cx={(node as { cx: number }).cx} cy={(node as { cy: number }).cy} rx={(node as { rx: number }).rx} ry={(node as { ry: number }).ry} fill={fillColor} opacity={0.8} />
-                  if (node.type === 'circle') return <circle key={node.id} cx={(node as { cx: number }).cx} cy={(node as { cy: number }).cy} r={(node as { r: number }).r} fill={fillColor} opacity={0.8} />
-                  return null
-                })}
-              </svg>
+              <DocumentThumbnail doc={record.data} />
             </div>
 
             {/* Info */}

@@ -13,11 +13,18 @@ export function EditorPage() {
   const toggleOutlineMode = useEditorStore((s) => s.toggleOutlineMode)
   const outlineMode = useEditorStore((s) => s.view.outlineMode)
 
-  // Initialize outline mode from settings default on first mount
+  // Initialize editor view from persisted settings on first mount
   useEffect(() => {
     if (outlineModeDefault !== outlineMode) {
       toggleOutlineMode()
     }
+    const s = useSettingsStore.getState()
+    useEditorStore.setState((state) => {
+      state.view.snapConfig.gridSize = s.defaultGridSize
+      state.view.snapConfig.angleSnapDegrees = s.angleSnapDegrees
+      state.view.showGuides = s.showGuidesByDefault
+      state.view.showGrid = s.showGridByDefault
+    })
   // Only run once on mount — intentionally omitting deps
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])

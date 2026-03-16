@@ -14,7 +14,7 @@ This README describes the **current state of the repo as it exists now**, includ
 
 The repo currently includes:
 
-- a working multi-page app: **Editor**, **Home**, **Export**, **Settings**, and a dormant **Inspect** page
+- a working multi-page app: **Editor**, **Home**, **Export**, and **Settings**
 - Dexie-backed document persistence and snapshot persistence
 - a functional SVG editing canvas with pan, zoom, selection, transforms, and overlays
 - shape drawing, pen/path creation, text placement, image import, grouping, alignment, distribution, path conversion, and boolean ops
@@ -27,8 +27,6 @@ The repo currently includes:
 
 The repo also contains several systems that are only partly wired:
 
-- the standalone **Inspect page** exists, but the editor never navigates to it
-- the **Settings page** persists some preferences that do not yet fully drive runtime behavior
 - the Dexie **assets table** exists, but there is no real asset library flow using it
 - the broader **resource model** exists, but only gradients are meaningfully wired end to end
 - document thumbnails on the Home page only render a small subset of node types
@@ -37,9 +35,7 @@ The repo also contains several systems that are only partly wired:
 
 This is a working editor with a genuine core, not fake scaffolding. But it still has some painted doors:
 
-- some settings save without fully affecting the editor
-- some data models are ahead of the UI and behavior
-- some supporting pages exist without being part of the main user flow
+- some data models are ahead of the UI and behavior (resource types, asset library)
 
 ---
 
@@ -364,102 +360,7 @@ Current state:
 
 This section is the most important reality check in the repo.
 
-## 1) The standalone Inspect page is not part of the real editing flow
-
-Files:
-
-- `src/pages/inspect/InspectPage.tsx`
-- `src/app/routing/AppRouter.tsx`
-- `src/app/routing/NavigationContext.tsx`
-
-Current state:
-
-- the router handles `'inspect'` as a valid page value
-- the page itself works as a read-only inspector
-- no code in the app ever calls `navigate('inspect')`, so the page is unreachable during normal use
-
-Practical result:
-
-- the standalone Inspect page is effectively dormant
-- the bottom-bar Inspect mode is a separate workflow that stays inside the editor
-
-## 2) `snapThresholdPx` is persisted but not consumed by snapping logic
-
-Files involved:
-
-- `src/pages/settings/SettingsPage.tsx`
-- `src/stores/settingsStore.ts`
-- `src/features/canvas/components/CanvasArtworkLayer.tsx` (line 706)
-- `src/features/path/components/PathEditOverlay.tsx` (lines 153–154)
-
-Current state:
-
-- the setting can be changed and is persisted to localStorage via `settingsStore`
-- both `CanvasArtworkLayer` and `PathEditOverlay` call `screenThresholdToDocSpace(8, zoom)` with the threshold **hardcoded to `8`** rather than reading from `settingsStore`
-- the snapping function `snapPoint` in `src/features/path/utils/snapUtils.ts` already accepts a threshold parameter — the fix is simply to pass `settingsStore.snapThresholdPx` at the two call sites above
-
-Practical result:
-
-- changing snap threshold in Settings has no effect on actual snapping behavior
-
-## 3) `defaultExportScale` is saved but not used by the export flow
-
-Files involved:
-
-- `src/pages/settings/SettingsPage.tsx`
-- `src/stores/settingsStore.ts`
-- `src/features/export/svgSerializer.ts`
-- `src/pages/export/ExportPage.tsx`
-
-Current state:
-
-- the setting is stored in `settingsStore` (options: 1×, 2×, 3×)
-- `serializeDocumentToSvg` and `ExportPage` do not read this value
-
-Practical result:
-
-- this preference currently behaves like unfinished plumbing
-
-## 4) Grid and guide visibility toggles are not true persisted settings
-
-Files involved:
-
-- `src/pages/settings/SettingsPage.tsx`
-- `src/stores/editorStore.ts`
-- `src/stores/settingsStore.ts`
-
-Current state:
-
-- Settings exposes "Show guides by default" and "Show grid by default"
-- both toggles directly mutate `editorStore.view.showGrid` / `editorStore.view.showGuides`
-- neither value is stored in `settingsStore`
-- `editorStore` initializes with hardcoded defaults: `showGrid: false`, `showGuides: true`
-
-Note: **grid size** and **angle snap degrees** are handled differently — they are stored in `settingsStore` and also immediately applied to `editorStore` when changed in Settings. However, they are still **not read from `settingsStore` at editor boot**, so session changes do not persist across app restarts.
-
-Practical result:
-
-- "Show guides" and "Show grid" toggles are current-session view toggles, not real defaults
-- grid size and angle snap changes survive the Settings page within a session but reset to hardcoded values on app restart
-
-## 5) Only `outlineModeDefault` is initialized from settings at editor boot
-
-Files involved:
-
-- `src/pages/editor/EditorPage.tsx`
-- `src/stores/settingsStore.ts`
-- `src/stores/editorStore.ts`
-
-Current state:
-
-- outline mode is initialized from `settingsStore.outlineModeDefault` on editor mount (via `useEffect` in `EditorPage`)
-- grid size, angle snap, and grid/guide visibility are not read from `settingsStore` at boot
-
-Practical result:
-
-- settings support is uneven across different view preferences
-
-## 6) Dexie `assets` table exists but is unused
+## 1) Dexie `assets` table exists but is unused
 
 File: `src/db/dexie/db.ts`
 
@@ -473,7 +374,7 @@ Practical result:
 
 - the repo has no true asset library despite the database scaffold
 
-## 7) Broader resource model is ahead of implementation
+## 2) Broader resource model is ahead of implementation
 
 File: `src/model/resources/resourceTypes.ts`
 
@@ -487,7 +388,7 @@ Practical result:
 
 - the architecture suggests a bigger editor than the current product surface actually delivers
 
-## 8) Home thumbnails are incomplete previews
+## 3) Home thumbnails are incomplete previews
 
 File: `src/pages/home/HomePage.tsx`
 
@@ -606,22 +507,18 @@ There is also a `.github/workflows/unzip-repo-final.yml` workflow for phone-orie
 
 This phased list is intentionally written from **where the repo is now**, not from an earlier roadmap.
 
-## Phase 1 — fix misleading or half-wired settings
+## Phase 1 — fix misleading or half-wired settings ✓ COMPLETE
 
 Goal: make the Settings page tell the truth.
 
-Work to do:
+Changes made:
 
-- wire `snapThresholdPx` into actual snap calculations: replace the hardcoded `8` in `CanvasArtworkLayer.tsx:706` and `PathEditOverlay.tsx:153` with `useSettingsStore.getState().snapThresholdPx` passed through `screenThresholdToDocSpace`
-- wire `defaultExportScale` into the export flow, or remove the control until real scaled export exists
-- decide whether "Show grid by default" and "Show guides by default" should be real persisted settings
-- if yes, add them to `settingsStore` and initialize `editorStore.view` from them at editor boot alongside `outlineModeDefault`
-- initialize grid size and angle snap from `settingsStore` at editor boot, not just when the Settings page is open
-- resolve the standalone `InspectPage` (see Known gap #1): either wire `navigate('inspect')` into the editor flow, or remove the page and fold any unique functionality into the inspector sheet
-
-Why this phase matters:
-
-right now Settings overpromises on three separate controls and the Inspect page is effectively dead code. Fixing these removes confusion and makes the repo easier to trust.
+- wired `snapThresholdPx` into snap calculations: `CanvasArtworkLayer.tsx` and `PathEditOverlay.tsx` now read `useSettingsStore.getState().snapThresholdPx` instead of a hardcoded `8`
+- removed the "Default export scale" UI control from Settings (the store value is kept for Phase 5 when real scaled export lands)
+- added `showGuidesByDefault` and `showGridByDefault` to `settingsStore` as true persisted settings
+- Settings "Show guides by default" and "Show grid by default" toggles now persist to `settingsStore` and apply to the live editor
+- editor boot now initializes grid size, angle snap, guide visibility, and grid visibility from `settingsStore` alongside the existing outline mode initialization
+- removed the dormant `InspectPage` and its route; `AppPage` type no longer includes `'inspect'`
 
 ## Phase 2 — make previews honest
 
@@ -717,7 +614,7 @@ this repo has a strong skeleton now. A cleanup pass will make it much easier to 
 
 If development resumes immediately, the best order is:
 
-1. Phase 1 — fix settings truthfulness and resolve the dormant Inspect page
+1. ~~Phase 1 — fix settings truthfulness and resolve the dormant Inspect page~~ ✓ Done
 2. Phase 2 — improve Home previews
 3. Phase 4 — add more integration tests in parallel as the above work lands
 4. Phase 3 — decide the fate of the asset and resource systems
@@ -743,10 +640,8 @@ It is strongest today in:
 
 It is weakest today in:
 
-- settings consistency (three unwired controls, uneven boot initialization)
-- dormant standalone inspect flow
 - asset-library completion
 - broader resource-system completion
 - honest thumbnail previews
 
-In plain English: the engine runs, the steering works, the dashboard mostly works, and a few buttons still light up without being connected to anything important.
+In plain English: the engine runs, the steering works, the dashboard works, and the remaining gaps are in the asset library and broader resource systems rather than the core editing experience.

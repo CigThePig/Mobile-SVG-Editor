@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, type PropsWithChildren } from 'react'
 
-export type AppPage = 'home' | 'editor' | 'export' | 'settings' | 'inspect'
+export type AppPage = 'home' | 'editor' | 'export' | 'settings'
 
 interface NavigationContextValue {
   page: AppPage

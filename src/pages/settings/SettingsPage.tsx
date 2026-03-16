@@ -4,8 +4,8 @@ import { useEditorStore } from '@/stores/editorStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { db } from '@/db/dexie/db'
 
+
 const ANGLE_OPTIONS = [5, 10, 15, 22.5, 30, 45, 90]
-const EXPORT_SCALES = [1, 2, 3]
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -84,7 +84,6 @@ function Toggle({ on, onChange }: { on: boolean; onChange: (v: boolean) => void 
 export function SettingsPage() {
   const { navigate } = useNavigation()
   const settings = useSettingsStore()
-  const view = useEditorStore((s) => s.view)
 
   const handleGridSizeChange = (v: number) => {
     settings.setDefaultGridSize(v)
@@ -181,39 +180,16 @@ export function SettingsPage() {
             <Toggle on={settings.outlineModeDefault} onChange={settings.setOutlineModeDefault} />
           </Row>
           <Row label="Show guides by default">
-            <Toggle on={view.showGuides} onChange={(v) => {
+            <Toggle on={settings.showGuidesByDefault} onChange={(v) => {
+              settings.setShowGuidesByDefault(v)
               useEditorStore.setState((state) => { state.view.showGuides = v })
             }} />
           </Row>
           <Row label="Show grid by default">
-            <Toggle on={view.showGrid} onChange={(v) => {
+            <Toggle on={settings.showGridByDefault} onChange={(v) => {
+              settings.setShowGridByDefault(v)
               useEditorStore.setState((state) => { state.view.showGrid = v })
             }} />
-          </Row>
-        </Section>
-
-        <Section title="Export">
-          <Row label="Default export scale">
-            <div style={{ display: 'flex', gap: 6 }}>
-              {EXPORT_SCALES.map((s) => (
-                <button
-                  key={s}
-                  style={{
-                    padding: '6px 12px',
-                    borderRadius: 8,
-                    border: '1px solid',
-                    borderColor: settings.defaultExportScale === s ? '#818cf8' : 'rgba(255,255,255,0.15)',
-                    background: settings.defaultExportScale === s ? 'rgba(129,140,248,0.2)' : 'rgba(255,255,255,0.06)',
-                    color: settings.defaultExportScale === s ? '#c7d2fe' : 'rgba(255,255,255,0.7)',
-                    fontSize: 13,
-                    cursor: 'pointer'
-                  }}
-                  onClick={() => settings.setDefaultExportScale(s)}
-                >
-                  {s}×
-                </button>
-              ))}
-            </div>
           </Row>
         </Section>
 

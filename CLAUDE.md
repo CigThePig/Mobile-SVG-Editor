@@ -48,7 +48,7 @@ Wave 2 — Real Usable Core
 
 | Phase | Title | Status |
 |---|---|---|
-| 5 | Upgrade the renderer into a real SVG scene renderer | ⬜ Pending |
+| 5 | Upgrade the renderer into a real SVG scene renderer | ✅ Done |
 | 6 | Build complete import UX | ⬜ Pending |
 | 7 | Build source mode as a first-class editor | ⬜ Pending |
 | 8 | Rebuild the inspector into a complete structural editor | ⬜ Pending |
@@ -114,6 +114,15 @@ src/
   components/   Shared UI components
   db/           Dexie-based persistence
   features/     Feature modules (canvas, documents, export, inspector, layers, path, resources, selection, snapshots, workspace)
+    canvas/     Phase 5: Real SVG scene renderer
+                render/
+                  index.ts                — public barrel export
+                  renderNode.tsx          — full node dispatcher (all SvgNodeType cases)
+                  renderStyle.ts          — AppearanceModel → SVG presentation attributes
+                  renderTransform.ts      — TransformModel → SVG transform string (matrix + decomposed)
+                  renderText.tsx          — text/tspan/textPath rendering
+                  renderUse.tsx           — <use> element rendering
+                  renderResources.tsx     — SvgDefsLayer: gradients, patterns, filters, markers defs
     export/     Phase 3: Round-trip-safe serialization engine
                 index.ts                  — unified entry: serializeSvgDocument()
                 svgSerializeUtils.ts      — shared XML helpers, attribute builders

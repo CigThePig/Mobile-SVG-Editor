@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { ArrowLeft, FilePlus, Undo2, Redo2, ZoomIn, ZoomOut, Save, Layers, SlidersHorizontal, ImagePlus, Download, History, Settings, FolderOpen } from 'lucide-react'
+import { ArrowLeft, FilePlus, Undo2, Redo2, ZoomIn, ZoomOut, Save, Layers, SlidersHorizontal, ImagePlus, Download, History, Settings, FolderOpen, FileCode2 } from 'lucide-react'
 import { createAndSaveDocument, saveDocument } from '@/db/dexie/queries'
 import { useEditorStore } from '@/stores/editorStore'
 import { useHistoryStore } from '@/stores/historyStore'
@@ -8,6 +8,8 @@ import { runCommand } from '@/features/documents/services/commandRunner'
 import { DocumentSettingsSheet } from '@/features/documents/components/DocumentSettingsSheet'
 import { SnapshotsSheet } from '@/features/snapshots/components/SnapshotsSheet'
 import { ImportSvgSheet } from '@/features/import/components/ImportSvgSheet'
+import { useSourceStore } from '@/features/source/sourceState'
+import { updateSourceFromDocument } from '@/features/source/sourceSync'
 
 const iconBtn = (active = false, disabled = false): React.CSSProperties => ({
   width: 40,
@@ -40,6 +42,9 @@ export function EditorTopBar() {
   const canRedo = useHistoryStore((s) => s.redoStack.length > 0)
   const { navigate } = useNavigation()
   const imageInputRef = useRef<HTMLInputElement>(null)
+  const sourceOpen = useSourceStore((s) => s.isOpen)
+  const openSource = useSourceStore((s) => s.openSource)
+  const sourcePending = useSourceStore((s) => s.syncState === 'source-pending')
   const [docSettingsOpen, setDocSettingsOpen] = useState(false)
   const [snapshotsOpen, setSnapshotsOpen] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
@@ -100,19 +105,35 @@ export function EditorTopBar() {
   }
 
   const handleUndo = async () => {
+    // Block undo while source has unapplied changes (per sync contract)
+    if (useSourceStore.getState().syncState === 'source-pending') return
     const previous = undo()
     if (!previous) return
     replaceDocument(previous)
     clearSelection()
     await saveDocument(previous)
+    // Update source text if source editor is open
+    const sourceState = useSourceStore.getState()
+    if (sourceState.isOpen) {
+      const newText = updateSourceFromDocument(previous, sourceState.lastAppliedText)
+      useSourceStore.setState((s) => { s.lastAppliedText = newText; s.syncState = 'clean' })
+    }
   }
 
   const handleRedo = async () => {
+    // Block redo while source has unapplied changes (per sync contract)
+    if (useSourceStore.getState().syncState === 'source-pending') return
     const next = redo()
     if (!next) return
     replaceDocument(next)
     clearSelection()
     await saveDocument(next)
+    // Update source text if source editor is open
+    const sourceState = useSourceStore.getState()
+    if (sourceState.isOpen) {
+      const newText = updateSourceFromDocument(next, sourceState.lastAppliedText)
+      useSourceStore.setState((s) => { s.lastAppliedText = newText; s.syncState = 'clean' })
+    }
   }
 
   return (
@@ -147,6 +168,14 @@ export function EditorTopBar() {
         <button style={iconBtn()} onClick={() => setImportOpen(true)} aria-label="Import SVG">
           <FolderOpen size={20} />
         </button>
+        <button
+          style={iconBtn(sourceOpen, false)}
+          onClick={openSource}
+          aria-label="Source editor"
+          title={sourcePending ? 'Source editor (unapplied changes)' : 'Source editor'}
+        >
+          <FileCode2 size={20} color={sourcePending ? '#facc15' : undefined} />
+        </button>
       </div>
 
       {/* Center: title (tap to open document settings) */}
@@ -176,18 +205,20 @@ export function EditorTopBar() {
       {/* Right group: undo/redo | zoom | inspector | save */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
         <button
-          disabled={!canUndo}
+          disabled={!canUndo || sourcePending}
           onClick={() => void handleUndo()}
-          style={iconBtn(false, !canUndo)}
+          style={iconBtn(false, !canUndo || sourcePending)}
           aria-label="Undo"
+          title={sourcePending ? 'Apply or discard source changes first' : 'Undo'}
         >
           <Undo2 size={18} />
         </button>
         <button
-          disabled={!canRedo}
+          disabled={!canRedo || sourcePending}
           onClick={() => void handleRedo()}
-          style={iconBtn(false, !canRedo)}
+          style={iconBtn(false, !canRedo || sourcePending)}
           aria-label="Redo"
+          title={sourcePending ? 'Apply or discard source changes first' : 'Redo'}
         >
           <Redo2 size={18} />
         </button>

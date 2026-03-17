@@ -5,6 +5,7 @@ import { ContextActionStrip } from '@/components/layout/ContextActionStrip'
 import { CanvasViewport } from '@/features/canvas/components/CanvasViewport'
 import { InspectorSheet } from '@/features/inspector/components/InspectorSheet'
 import { LayersPanel } from '@/features/layers/components/LayersPanel'
+import { SourceEditorSheet } from '@/features/source'
 import { useEditorStore } from '@/stores/editorStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 
@@ -62,6 +63,7 @@ export function EditorPage() {
       <EditorBottomBar />
       <LayersPanel />
       <InspectorSheet />
+      <SourceEditorSheet />
     </div>
   )
 }

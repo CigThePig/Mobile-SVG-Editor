@@ -51,7 +51,7 @@ Wave 2 — Real Usable Core
 | 5 | Upgrade the renderer into a real SVG scene renderer | ✅ Done |
 | 6 | Build complete import UX | ✅ Done |
 | 7 | Build source mode as a first-class editor | ✅ Done |
-| 8 | Rebuild the inspector into a complete structural editor | ⬜ Pending |
+| 8 | Rebuild the inspector into a complete structural editor | ✅ Done |
 | 9 | Rebuild the layers panel into a document tree plus defs tree | ⬜ Pending |
 | 17 | Expand the command system and history for all new SVG operations | ⬜ Pending |
 | 18 | Rework persistence and storage for full SVG documents | ⬜ Pending |
@@ -143,6 +143,21 @@ src/
                 sourceCommands.ts       — applySourceCommand(), revertSourceCommand(), formatSourceCommand(), formatAndApplySourceCommand()
                 sourceDiagnostics.tsx   — SourceDiagnosticsPanel: collapsible diagnostic display
                 SourceEditorSheet.tsx   — Full-screen Monaco-based SVG/XML editor sheet
+    inspector/  Phase 8: Complete structural editor inspector
+                components/
+                  InspectorSheet.tsx      — Vaul bottom-drawer shell: accordion, header, section composition
+                  inspectorShared.tsx     — Shared style tokens (S), primitive sub-components
+                  sections/
+                    IdentitySection.tsx   — Name, type badge, ID, className, visibility, lock, editability tier
+                    GeometrySection.tsx   — Per-type geometry editors (rect/circle/ellipse/line/path/text/image/use/star)
+                    FillSection.tsx       — PaintModel editor: none/solid/gradient/pattern
+                    StrokeSection.tsx     — StrokeModel: color, width, opacity, lineCap, lineJoin, dashArray
+                    TransformSection.tsx  — TransformModel: translate, rotate, scale, skew, matrix display
+                    TextSection.tsx       — TextStyleModel + content textarea (text/tspan nodes)
+                    ReferencesSection.tsx — ID rename, referenced-by list, UseNode href link
+                    EffectsSection.tsx    — filterRef, maskRef, clipPathRef, blendMode, marker refs
+                    AttributesSection.tsx — aria-*/data-*/advanced attrs (editable) + raw preserved attrs
+                    MultiSelectionInspector.tsx — Multi-node: combined bounds, batch style, bulk actions
     references/ Phase 4: ID and reference graph engine
                 index.ts                  — public barrel export
                 idRegistry.ts             — IdRegistry type + buildIdRegistry(), rebuildDocIdRegistry(), generateUniqueId()

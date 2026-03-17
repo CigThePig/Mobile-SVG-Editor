@@ -19,7 +19,9 @@ import {
   groupSelectionCommand,
   ungroupSelectionCommand,
   moveNodeOutOfGroupCommand,
-  moveNodesIntoGroupCommand
+  moveNodesIntoGroupCommand,
+  updateNodeTransformCommand,
+  updateNodeAttributesCommand
 } from './documentCommands'
 import {
   addGradientCommand,
@@ -27,6 +29,11 @@ import {
   deleteGradientCommand,
   applyGradientToNodeCommand
 } from './resourceCommands'
+import {
+  renameIdCommand,
+  relinkReferenceCommand,
+  removeOrphanedResourcesCommand
+} from '@/features/references'
 import {
   convertToPathCommand,
   movePointCommand,
@@ -67,6 +74,12 @@ export function bootstrapCommands() {
   registerCommand(ungroupSelectionCommand)
   registerCommand(moveNodeOutOfGroupCommand)
   registerCommand(moveNodesIntoGroupCommand)
+  registerCommand(updateNodeTransformCommand)
+  registerCommand(updateNodeAttributesCommand)
+  // Reference commands
+  registerCommand(renameIdCommand)
+  registerCommand(relinkReferenceCommand)
+  registerCommand(removeOrphanedResourcesCommand)
   // Resource commands
   registerCommand(addGradientCommand)
   registerCommand(updateGradientCommand)

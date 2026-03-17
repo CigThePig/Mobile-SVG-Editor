@@ -1,6 +1,6 @@
 import { nanoid } from 'nanoid'
 import type { SvgDocument } from '@/model/document/documentTypes'
-import type { AppearanceModel, CircleNode, EllipseNode, GroupNode, ImageNode, LineNode, PathNode, PolygonNode, PolylineNode, RootNode, StarNode, StrokeModel, SvgNode, RectNode, TextNode } from '@/model/nodes/nodeTypes'
+import type { AppearanceModel, CircleNode, EllipseNode, GroupNode, ImageNode, LineNode, PathNode, PolygonNode, PolylineNode, RootNode, StarNode, StrokeModel, SvgNode, RectNode, TextNode, TransformModel } from '@/model/nodes/nodeTypes'
 import type { EditorCommand } from './commands'
 import { getNodeBounds, getLocalNodeBounds } from '@/features/selection/utils/nodeBounds'
 
@@ -767,6 +767,38 @@ export const addImageCommand: EditorCommand<{ href: string; x: number; y: number
         updatedAt: new Date().toISOString(),
         root: { ...document.root, children: [...(document.root.children ?? []), image] }
       }
+    }
+  }
+}
+
+export const updateNodeTransformCommand: EditorCommand<{ nodeId: string; transform: Partial<TransformModel> }> = {
+  id: 'document.updateNodeTransform',
+  label: 'Update Transform',
+  run: ({ document }, { nodeId, transform }) => {
+    const nextRoot = updateNodeInTree(document.root, nodeId, (n) => ({
+      ...n,
+      transform: { ...n.transform, ...transform }
+    }))
+    return {
+      label: 'Update Transform',
+      selectionIds: [nodeId],
+      document: { ...document, updatedAt: new Date().toISOString(), root: nextRoot as typeof document.root }
+    }
+  }
+}
+
+export const updateNodeAttributesCommand: EditorCommand<{ nodeId: string; attributes: Record<string, string> }> = {
+  id: 'document.updateNodeAttributes',
+  label: 'Update Attributes',
+  run: ({ document }, { nodeId, attributes }) => {
+    const nextRoot = updateNodeInTree(document.root, nodeId, (n) => ({
+      ...n,
+      attributes
+    }))
+    return {
+      label: 'Update Attributes',
+      selectionIds: [nodeId],
+      document: { ...document, updatedAt: new Date().toISOString(), root: nextRoot as typeof document.root }
     }
   }
 }

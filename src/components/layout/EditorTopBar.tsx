@@ -7,9 +7,7 @@ import { useNavigation } from '@/app/routing/NavigationContext'
 import { runCommand } from '@/features/documents/services/commandRunner'
 import { DocumentSettingsSheet } from '@/features/documents/components/DocumentSettingsSheet'
 import { SnapshotsSheet } from '@/features/snapshots/components/SnapshotsSheet'
-import { ImportDialog } from '@/features/import/components/ImportDialog'
-import { ImportSummarySheet } from '@/features/import/components/ImportSummarySheet'
-import type { SvgImportResult } from '@/features/import/svgImportTypes'
+import { ImportSvgSheet } from '@/features/import/components/ImportSvgSheet'
 
 const iconBtn = (active = false, disabled = false): React.CSSProperties => ({
   width: 40,
@@ -45,8 +43,6 @@ export function EditorTopBar() {
   const [docSettingsOpen, setDocSettingsOpen] = useState(false)
   const [snapshotsOpen, setSnapshotsOpen] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
-  const [importResult, setImportResult] = useState<SvgImportResult | null>(null)
-  const [importSummaryOpen, setImportSummaryOpen] = useState(false)
 
   const zoomAroundCenter = (nextZoom: number) => {
     const clampedZoom = Math.min(4, Math.max(0.25, nextZoom))
@@ -249,18 +245,9 @@ export function EditorTopBar() {
         </button>
         <SnapshotsSheet open={snapshotsOpen} onOpenChange={setSnapshotsOpen} />
       </div>
-      <ImportDialog
+      <ImportSvgSheet
         open={importOpen}
         onOpenChange={setImportOpen}
-        onImportComplete={(result) => {
-          setImportResult(result)
-          setImportSummaryOpen(true)
-        }}
-      />
-      <ImportSummarySheet
-        open={importSummaryOpen}
-        onOpenChange={setImportSummaryOpen}
-        result={importResult}
       />
     </header>
   )

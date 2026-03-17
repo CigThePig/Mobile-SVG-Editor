@@ -49,7 +49,7 @@ Wave 2 — Real Usable Core
 | Phase | Title | Status |
 |---|---|---|
 | 5 | Upgrade the renderer into a real SVG scene renderer | ✅ Done |
-| 6 | Build complete import UX | ⬜ Pending |
+| 6 | Build complete import UX | ✅ Done |
 | 7 | Build source mode as a first-class editor | ⬜ Pending |
 | 8 | Rebuild the inspector into a complete structural editor | ⬜ Pending |
 | 9 | Rebuild the layers panel into a document tree plus defs tree | ⬜ Pending |

@@ -116,7 +116,13 @@ export function serializeTextNode(node: TextNode, mode: SerializeMode): string {
 
   let innerContent: string
   if (node.runs?.length) {
-    innerContent = node.runs.map((r) => serializeTspan(r, mode)).join('')
+    innerContent = node.runs
+      .map((r) =>
+        r.type === 'textPath'
+          ? serializeTextPathNode(r, mode)
+          : serializeTspan(r, mode)
+      )
+      .join('')
   } else {
     innerContent = xmlEscapeText(node.content ?? '')
   }

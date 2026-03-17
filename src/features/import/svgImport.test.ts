@@ -186,10 +186,14 @@ describe('parseSvgString — text elements', () => {
     if (text?.type === 'text') {
       expect(text.runs).toHaveLength(2)
       if (text.runs) {
-        expect(text.runs[0].type).toBe('tspan')
-        expect(text.runs[0].content).toBe('Bold text')
-        expect(text.runs[0].dy).toBe(10)
-        expect(text.runs[1].type).toBe('tspan')
+        const run0 = text.runs[0]
+        const run1 = text.runs[1]
+        expect(run0.type).toBe('tspan')
+        if (run0.type === 'tspan') {
+          expect(run0.content).toBe('Bold text')
+          expect(run0.dy).toBe(10)
+        }
+        expect(run1.type).toBe('tspan')
       }
     }
   })

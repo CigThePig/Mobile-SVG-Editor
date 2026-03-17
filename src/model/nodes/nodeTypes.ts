@@ -264,8 +264,8 @@ export interface TextNode extends BaseNode {
   y: number
   /** Plain text content — used for editor-native text and backward compat */
   content: string
-  /** Rich text runs (tspan children) — populated by the import engine */
-  runs?: TspanNode[]
+  /** Rich text runs (tspan and textPath children) — populated by the import engine */
+  runs?: Array<TspanNode | TextPathNode>
   textStyle?: TextStyleModel
   style?: AppearanceModel
 }

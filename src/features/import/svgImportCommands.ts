@@ -48,6 +48,22 @@ export async function importSvgFile(file: File): Promise<SvgImportResult> {
 }
 
 /**
+ * Commit a pre-parsed SvgImportResult to the editor store, history, and DB.
+ *
+ * Use this for preview-before-commit workflows where parseSvgString() was
+ * called separately to show a preview without side effects. Mutate result.doc
+ * (e.g. serializationMode) before calling this if needed.
+ */
+export async function commitImportResult(result: SvgImportResult): Promise<void> {
+  const editorStore = useEditorStore.getState()
+  const historyStore = useHistoryStore.getState()
+  const beforeDoc = editorStore.activeDocument
+  editorStore.replaceDocument(result.doc)
+  historyStore.pushSnapshot('Import SVG', beforeDoc, result.doc)
+  await saveDocument(result.doc)
+}
+
+/**
  * Import SVG from the system clipboard.
  * Reads text content from the clipboard and treats it as an SVG string.
  */

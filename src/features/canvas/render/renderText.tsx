@@ -106,7 +106,7 @@ export function renderTextNode(
   if (node.runs?.length) {
     children = node.runs.map((run) => {
       if (run.type === 'textPath') {
-        return renderTextPathNode(run as unknown as TextPathNode, onPointerDown, outlineMode)
+        return renderTextPathNode(run, onPointerDown, outlineMode)
       }
       return renderTspanNode(run, onPointerDown, outlineMode)
     })

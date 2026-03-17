@@ -50,7 +50,7 @@ Wave 2 — Real Usable Core
 |---|---|---|
 | 5 | Upgrade the renderer into a real SVG scene renderer | ✅ Done |
 | 6 | Build complete import UX | ✅ Done |
-| 7 | Build source mode as a first-class editor | ⬜ Pending |
+| 7 | Build source mode as a first-class editor | ✅ Done |
 | 8 | Rebuild the inspector into a complete structural editor | ⬜ Pending |
 | 9 | Rebuild the layers panel into a document tree plus defs tree | ⬜ Pending |
 | 17 | Expand the command system and history for all new SVG operations | ⬜ Pending |
@@ -134,6 +134,15 @@ src/
                 svgSerializeRoundTrip.ts  — Mode B: round-trip-safe output (diff-match-patch)
                 svgSerializer.ts          — backward-compat shim (re-exports unified API)
     import/     Phase 2: Loss-aware SVG DOM import engine
+    source/     Phase 7: Source mode as a first-class editor
+                index.ts                — public barrel export
+                sourceState.ts          — Zustand sync state machine (SyncState, useSourceStore)
+                sourceSelectionMap.ts   — Node ID ↔ source text offset mapping
+                sourceSync.ts           — Bidirectional sync: updateSourceFromDocument(), applySourceToDocument()
+                sourceFormatting.ts     — prettier + xml-formatter integration: formatSvgSource()
+                sourceCommands.ts       — applySourceCommand(), revertSourceCommand(), formatSourceCommand(), formatAndApplySourceCommand()
+                sourceDiagnostics.tsx   — SourceDiagnosticsPanel: collapsible diagnostic display
+                SourceEditorSheet.tsx   — Full-screen Monaco-based SVG/XML editor sheet
     references/ Phase 4: ID and reference graph engine
                 index.ts                  — public barrel export
                 idRegistry.ts             — IdRegistry type + buildIdRegistry(), rebuildDocIdRegistry(), generateUniqueId()
